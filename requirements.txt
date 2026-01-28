@@ -1,0 +1,7 @@
+# CadQuery dependencies
+# Install via conda for best compatibility:
+# conda create -n cadquery-env python=3.11 -y
+# conda activate cadquery-env
+# conda install -c conda-forge cadquery -y
+
+cadquery>=2.5.2
