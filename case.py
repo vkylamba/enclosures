@@ -4,7 +4,7 @@ import cadquery as cq
 box_length = 103  # mm
 box_width = 54    # mm
 box_height = 50   # mm
-wall_thickness = 2.5
+wall_thickness = 2
 
 # Outer dimensions (box_length/width/height are inner cavity dimensions)
 outer_length = box_length + 2 * wall_thickness
@@ -18,18 +18,29 @@ lid_height = box_height / 5
 # Push button on lid (right side of LCD)
 push_button_dia = 7  # mm, panel-mount momentary button
 
-# Arduino Mega Mounting Holes (Approx spacing)
+# Arduino Mega mounting-hole centres from board drawing (mm)
+# Origin is board bottom-left, independent of enclosure dimensions.
+board_length = 101.6
+board_width = 53.3
 mega_mounts = [
-    (5, 5), (5, 48), (97, 5), (97, 48),
-    (5, 26), (97, 26)
+    (14.0, 2.5),    # First from bottom left
+    (15.3, 50.8),   # First from top left
+    (64.8, 7.6),    # Second from bottom left
+    (64.8, 35.5),   # Second from top left
+    (93.0, 2.5),    # Third from bottom left
+    (88.9, 48.2),   # Third from top left
 ]
 mount_dia = 3
 
 # Cutouts on side walls
 usb_cut_arduino = (10, 5)  # USB cutout for micro-USB and USB-C
 rj45_cut = (16, 14)
-audio_jack_dia = 7
+audio_jack_dia = 6
 num_audio_jacks = 4
+first_audio_jack_center_from_left = 7.5
+audio_jack_spacing_center_to_center = 12.8
+audio_jack_center_height_from_bottom = 14
+extra_audio_jack_center_from_left = 24.5
 
 # Parameters for lid and screw bosses
 lid_thickness = wall_thickness
@@ -53,18 +64,18 @@ for (x, y) in mega_mounts:
     base = base.cut(
         cq.Workplane("XY")
         .workplane(offset=-outer_height/2 + wall_thickness)
-        .pushPoints([(x - box_length/2, y - box_width/2)])
+        .pushPoints([(x - board_length/2, y - board_width/2)])
         .circle(mount_dia/2)
         .extrude(-wall_thickness)
     )
 
-# Power barrel jack: 9mm diameter at (30.5, 7.5) from bottom-right (not center)
-# Calculate Y from bottom (vertical), Z from right (horizontal)
+# Power barrel jack: 9mm diameter from bottom and left-side horizontal offset
+# On YZ wall sketch: first coord is horizontal across wall, second is vertical.
 power_jack_dia = 9
 # In CadQuery, Y=0 is box center, so:
 power_center_y = - outer_height / 2 + power_jack_dia / 2 + 3 # 3mm offset from bottom
-# For Z, right edge is +outer_width/2, so subtract offset from +outer_width/2
-power_center_z = outer_width / 2 - power_jack_dia / 2 - 5 # 5mm offset from left edge
+# Horizontal placement from left side of wall
+power_center_z = -outer_width / 2 + power_jack_dia / 2 + 5
 
 power_jack_cutout = (cq.Workplane("YZ")
                      .workplane(offset=-outer_length/2)
@@ -73,10 +84,10 @@ power_jack_cutout = (cq.Workplane("YZ")
                      .extrude(wall_thickness))
 base = base.cut(power_jack_cutout)
 
-# USB cutout on left wall (Arduino Uno spec)
-# USB: At (13.5, 7.5) from bottom-left
+# USB cutout on left wall
+# USB horizontal placement measured from right side of wall
 usb_center_y = - outer_height / 2 + usb_cut_arduino[1] / 2 + 3  # 3mm offset from bottom 
-usb_center_z = usb_cut_arduino[0] / 2 - outer_width / 2 + 13.5  # 13.5mm from left edge
+usb_center_z = outer_width / 2 - usb_cut_arduino[0] / 2 - 13.5
 usb_cutout = (cq.Workplane("YZ")
               .workplane(offset=-outer_length/2)
               .center(usb_center_z, usb_center_y)
@@ -95,8 +106,15 @@ rj45_cutout = (cq.Workplane("YZ")
 base = base.cut(rj45_cutout)
 
 # 4x 3.5mm jack cutouts on right wall
-spacing = outer_width / (num_audio_jacks + 1)
-jack_positions = [((i+1)*spacing - outer_width/2, 0) for i in range(num_audio_jacks)]
+jack_center_z = -outer_height / 2 + audio_jack_center_height_from_bottom
+jack_positions = [
+    (
+        -outer_width / 2 + first_audio_jack_center_from_left
+        + i * audio_jack_spacing_center_to_center,
+        jack_center_z,
+    )
+    for i in range(num_audio_jacks)
+]
 for pos in jack_positions:
     jack_hole = (cq.Workplane("YZ")
                  .workplane(offset=outer_length/2)
@@ -104,6 +122,16 @@ for pos in jack_positions:
                  .circle(audio_jack_dia/2)
                  .extrude(-wall_thickness))
     base = base.cut(jack_hole)
+
+# Extra audio jacks on both adjacent Y walls from the 4-jack wall (top view).
+extra_audio_jack_center_x = outer_length / 2 - extra_audio_jack_center_from_left
+for y_offset in (-outer_width / 2, outer_width / 2):
+    extra_jack_hole = (cq.Workplane("XZ")
+                       .workplane(offset=y_offset)
+                       .center(extra_audio_jack_center_x, jack_center_z)
+                       .circle(audio_jack_dia/2)
+                       .extrude(wall_thickness, both=True))
+    base = base.cut(extra_jack_hole)
 
 
 # Add screw bosses to base (at 4 corners, inset by screw_offset)

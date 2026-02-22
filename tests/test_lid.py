@@ -7,10 +7,10 @@ import cadquery as cq
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
 LID_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_lid.step"
 
-# Lid dimensions (from case.py)
-BOX_LENGTH = 103
-BOX_WIDTH = 54
-WALL_THICKNESS = 2.5
+# Lid dimensions references
+INNER_LENGTH_REF = 103
+INNER_WIDTH_REF = 55
+WALL_THICKNESS = 2
 LID_HEIGHT = 50 / 5  # box_height / 5
 
 # LCD cutout (from case.py)
@@ -65,7 +65,7 @@ class TestLidEnclosure(unittest.TestCase):
             )
 
         # A point on the top plate outside the LCD cutout should be solid.
-        outside_pt = cq.Vector(0, -(BOX_WIDTH / 2 - WALL_THICKNESS - 3), plate_z)
+        outside_pt = cq.Vector(0, -(INNER_WIDTH_REF / 2 - WALL_THICKNESS - 3), plate_z)
         self.assertTrue(
             shape.isInside(outside_pt),
             f"Lid surface {outside_pt.toTuple()} outside LCD should be solid",
@@ -102,8 +102,8 @@ class TestLidEnclosure(unittest.TestCase):
                 PUSH_BTN_X + dx, PUSH_BTN_Y + dy, plate_z,
             )
             # Only check if point is within the top plate footprint
-            if (abs(surround_pt.x) < BOX_LENGTH / 2
-                    and abs(surround_pt.y) < BOX_WIDTH / 2):
+            if (abs(surround_pt.x) < INNER_LENGTH_REF / 2
+                    and abs(surround_pt.y) < INNER_WIDTH_REF / 2):
                 self.assertTrue(
                     shape.isInside(surround_pt),
                     f"Lid material around button {surround_pt.toTuple()} should be solid",
