@@ -7,21 +7,17 @@ import cadquery as cq
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
 BASE_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_base.step"
 
-# Approx Arduino Mega footprint based on mounting-hole span with small margins.
-MEGA_MOUNT_SPAN_X = 97 - 5
-MEGA_MOUNT_SPAN_Y = 48 - 5
-BOARD_MARGIN = 2  # mm per side
-BOARD_LENGTH = MEGA_MOUNT_SPAN_X + 2 * BOARD_MARGIN
-BOARD_WIDTH = MEGA_MOUNT_SPAN_Y + 2 * BOARD_MARGIN
+# Arduino Mega hat footprint dimensions from measurements and reference PNG (mm)
 HAT_HEIGHT = 20  # mm
-WALL_THICKNESS = 2
-INNER_LENGTH_REF = 103
-INNER_WIDTH_REF = 55
-INNER_HEIGHT_REF = 50
+WALL_THICKNESS = 2.5
+BOARD_RAW_LENGTH = 102.7
+BOARD_RAW_WIDTH = 54.5
+DIN_GUIDE_HEIGHT = 10
 
 # Arduino Mega board drawing dimensions from reference PNG (mm)
-BOARD_DRAWING_LENGTH = 101.6 + 1.5  # add margin for silkscreen and measurement uncertainty
-BOARD_DRAWING_WIDTH = 53.3 + 1.5  # add margin for silkscreen and measurement uncertainty
+BOX_LENGTH = BOARD_RAW_LENGTH + 1.5  # add margin for silkscreen and measurement uncertainty
+BOX_WIDTH = BOARD_RAW_WIDTH + 1.5  # add margin for silkscreen and measurement uncertainty
+BOX_HEIGHT = 50  # mm, from case.py
 
 # Mounting-hole centres from board drawing (mm), origin at board bottom-left.
 # Pattern in drawing: 3 x-columns (14.0, 64.8, 88.9) with 3 y-levels
@@ -49,7 +45,7 @@ POWER_JACK_DIA = 9
 # Offsets on YZ side-wall sketch in case.py (mm)
 USB_FROM_RIGHT = 13.5
 POWER_FROM_LEFT = 5
-BOTTOM_OFFSET = 3
+BOTTOM_OFFSET = 5.5
 
 # Audio Jack from left
 AUDIO_JACK_DIA = 6
@@ -67,6 +63,11 @@ def _load_shape():
     return shape
 
 
+def _shell_floor_bottom_z(bbox):
+    # Enclosure shell height (without DIN rail): cavity + floor thickness
+    return bbox.zmax - (BOX_HEIGHT + WALL_THICKNESS)
+
+
 class TestBaseEnclosure(unittest.TestCase):
     def test_reference_dimensions_are_inner_based(self):
         """Reference dimensions/offsets must be valid against inner dimensions."""
@@ -77,14 +78,18 @@ class TestBaseEnclosure(unittest.TestCase):
 
         inner_length = bbox.xlen - 2 * WALL_THICKNESS
         inner_width = bbox.ylen - 2 * WALL_THICKNESS
-        inner_height = bbox.zlen - WALL_THICKNESS
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
+        floor_top_z = floor_bottom_z + WALL_THICKNESS
+        inner_height = bbox.zmax - floor_top_z
+        din_extension = floor_bottom_z - bbox.zmin
 
-        self.assertAlmostEqual(inner_length, INNER_LENGTH_REF, delta=0.2)
-        self.assertAlmostEqual(inner_width, INNER_WIDTH_REF, delta=0.2)
-        self.assertAlmostEqual(inner_height, INNER_HEIGHT_REF, delta=0.2)
+        self.assertAlmostEqual(inner_length, BOX_LENGTH, delta=0.2)
+        self.assertAlmostEqual(inner_width, BOX_WIDTH, delta=0.2)
+        self.assertAlmostEqual(inner_height, BOX_HEIGHT, delta=0.2)
+        self.assertAlmostEqual(din_extension, DIN_GUIDE_HEIGHT, delta=0.2)
 
-        self.assertLessEqual(BOARD_LENGTH, inner_length)
-        self.assertLessEqual(BOARD_WIDTH, inner_width)
+        self.assertLessEqual(BOX_LENGTH, inner_length)
+        self.assertLessEqual(BOX_WIDTH, inner_width)
 
         self.assertLessEqual(USB_FROM_RIGHT + USB_CUT_W / 2, inner_width)
         self.assertLessEqual(POWER_FROM_LEFT + POWER_JACK_DIA / 2, inner_width)
@@ -106,6 +111,7 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
         # Volume of solid material must be well below the bounding-box volume.
         # Walls + screw bosses + mounting posts can reach ~65%, so cap at 75%.
@@ -119,7 +125,7 @@ class TestBaseEnclosure(unittest.TestCase):
         )
 
         # Point inside the cavity (centre, a few mm above the floor) must be air.
-        cavity_point = cq.Vector(0, 0, bbox.zmin + WALL_THICKNESS + 5)
+        cavity_point = cq.Vector(0, 0, floor_bottom_z + WALL_THICKNESS + 5)
         self.assertFalse(
             shape.isInside(cavity_point),
             f"Point {cavity_point.toTuple()} should be hollow cavity, not solid",
@@ -128,7 +134,7 @@ class TestBaseEnclosure(unittest.TestCase):
         # Point inside a side wall must be solid.
         wall_point = cq.Vector(
             bbox.xmax - WALL_THICKNESS / 2, 0,
-            bbox.zmin + WALL_THICKNESS / 2,
+            floor_bottom_z + WALL_THICKNESS / 2,
         )
         self.assertTrue(
             shape.isInside(wall_point),
@@ -141,29 +147,30 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
         inner_length = bbox.xlen - 2 * WALL_THICKNESS
         inner_width = bbox.ylen - 2 * WALL_THICKNESS
-        inner_height = bbox.zlen - WALL_THICKNESS  # floor only, open top
+        inner_height = bbox.zmax - (floor_bottom_z + WALL_THICKNESS)
 
         self.assertGreaterEqual(
-            inner_length, BOARD_LENGTH,
-            f"Inner length {inner_length:.1f} mm < board {BOARD_LENGTH} mm",
+            inner_length, BOX_LENGTH,
+            f"Inner length {inner_length:.1f} mm < box {BOX_LENGTH} mm",
         )
         self.assertGreaterEqual(
-            inner_width, BOARD_WIDTH,
-            f"Inner width {inner_width:.1f} mm < board {BOARD_WIDTH} mm",
+            inner_width, BOX_WIDTH,
+            f"Inner width {inner_width:.1f} mm < box {BOX_WIDTH} mm",
         )
         self.assertGreaterEqual(
-            inner_height, HAT_HEIGHT,
-            f"Inner height {inner_height:.1f} mm < hat {HAT_HEIGHT} mm",
+            inner_height, BOX_HEIGHT,
+            f"Inner height {inner_height:.1f} mm < box {BOX_HEIGHT} mm",
         )
 
         # Verify the board footprint fits by checking that corner points
         # inside the cavity (at board level) are NOT solid.
-        board_z = bbox.zmin + WALL_THICKNESS + 1  # just above floor
-        half_l = BOARD_LENGTH / 2
-        half_w = BOARD_WIDTH / 2
+        board_z = floor_bottom_z + WALL_THICKNESS + 1  # just above floor
+        half_l = BOX_LENGTH / 2 - 1.0
+        half_w = BOX_WIDTH / 2 - 1.0
         for x, y in [(half_l, half_w), (-half_l, half_w),
                       (half_l, -half_w), (-half_l, -half_w)]:
             pt = cq.Vector(x, y, board_z)
@@ -178,13 +185,14 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
-        floor_mid_z = bbox.zmin + WALL_THICKNESS / 2  # mid-floor height
+        floor_mid_z = floor_bottom_z + WALL_THICKNESS / 2  # mid-floor height
 
         for mx, my in MEGA_MOUNTS:
             # Convert drawing coords (origin board bottom-left) to centered model XY.
-            cx = mx - BOARD_DRAWING_LENGTH / 2
-            cy = my - BOARD_DRAWING_WIDTH / 2
+            cx = mx - BOARD_RAW_LENGTH / 2
+            cy = my - BOARD_RAW_WIDTH / 2
 
             # Centre of mounting hole should be air (drilled through)
             hole_pt = cq.Vector(cx, cy, floor_mid_z)
@@ -215,18 +223,19 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
         wall_x = bbox.xmin + WALL_THICKNESS / 2
         opposite_wall_x = bbox.xmax - WALL_THICKNESS / 2
 
         usb_center_y = bbox.ymax - USB_FROM_RIGHT - USB_CUT_W / 2
-        usb_center_z = bbox.zmin + BOTTOM_OFFSET + USB_CUT_H / 2
+        usb_center_z = floor_bottom_z + BOTTOM_OFFSET + USB_CUT_H / 2
 
         rj45_center_y = usb_center_y
         rj45_center_z = usb_center_z + USB_CUT_H / 2 + RJ45_GAP + RJ45_CUT_H / 2
 
         power_center_y = bbox.ymin + POWER_FROM_LEFT + POWER_JACK_DIA / 2
-        power_center_z = bbox.zmin + BOTTOM_OFFSET + POWER_JACK_DIA / 2
+        power_center_z = floor_bottom_z + BOTTOM_OFFSET + POWER_JACK_DIA / 2
 
         # RJ45 should sit above USB on the same wall.
         self.assertGreater(
@@ -270,6 +279,7 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
         opposite_wall_x = bbox.xmax - WALL_THICKNESS / 2
 
@@ -280,7 +290,7 @@ class TestBaseEnclosure(unittest.TestCase):
             + index * AUDIO_JACK_SPACING_CENTER_TO_CENTER
             for index in range(NUMBER_OF_AUDIO_JACKS)
         ]
-        jack_center_z = bbox.zmin + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM
+        jack_center_z = floor_bottom_z + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM + BOTTOM_OFFSET
 
         for index, center_y in enumerate(jack_centres_y, start=1):
             centre_pt = cq.Vector(opposite_wall_x, center_y, jack_center_z)
@@ -306,6 +316,7 @@ class TestBaseEnclosure(unittest.TestCase):
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
 
         wall_y_positions = [
             bbox.ymax - WALL_THICKNESS / 2,
@@ -313,7 +324,7 @@ class TestBaseEnclosure(unittest.TestCase):
         ]
         jack_radius = AUDIO_JACK_DIA / 2
         extra_jack_center_x = bbox.xmax - EXTRA_AUDIO_JACK_CENTER_FROM_LEFT
-        extra_jack_center_z = bbox.zmin + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM
+        extra_jack_center_z = floor_bottom_z + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM + BOTTOM_OFFSET
 
         for wall_y in wall_y_positions:
             centre_pt = cq.Vector(extra_jack_center_x, wall_y, extra_jack_center_z)
