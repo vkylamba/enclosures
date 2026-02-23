@@ -58,11 +58,27 @@ audio_jack_spacing_center_to_center = 12.8
 audio_jack_center_height_from_bottom = 14
 extra_audio_jack_center_from_left = 24.5
 
-# Parameters for lid and screw bosses
+# Parameters for lid
 lid_thickness = wall_thickness
-screw_boss_dia = 7
-screw_hole_dia = 3
-screw_offset = 8  # distance from each edge
+
+# Snap-fit clip parameters
+clip_bump_width = 5.0          # mm along wall
+clip_bump_height = 2.0         # mm in Z
+clip_bump_depth = 0.5          # mm protrusion from skirt
+clip_y_positions = [-12, 12]   # mm from center, on each X-wall
+clip_groove_extra = 0.4        # total clearance added to groove vs bump (0.2/side)
+clip_groove_depth = 0.7        # mm pocket into base wall
+
+# Alignment ledge
+ledge_depth = 0.75             # mm step inward from cavity wall at top
+ledge_height = 2.0             # mm tall
+
+# Pry slot parameters (screwdriver lid removal, all 4 walls, cut from outside)
+pry_slot_width = 6.0           # mm along wall
+pry_slot_depth = 2.0           # mm inward from outer wall face
+pry_slot_height = 2.5          # mm down from base wall top
+pry_slot_x_positions = [-15, 15]  # mm from center, for Y walls (along length)
+pry_slot_y_positions = [-10, 10]  # mm from center, for X walls (along width)
 
 # Create base (box without top wall)
 outer = cq.Workplane("XY").box(outer_length, outer_width, outer_height)
@@ -152,17 +168,6 @@ for y_offset in (-outer_width / 2, outer_width / 2):
     base = base.cut(extra_jack_hole)
 
 
-# Add screw bosses to base (at 4 corners, inset by screw_offset)
-# REPLACE with screw posts on left and right walls (2 per wall, near corners)
-side_screw_hole_dia_inner = 2
-side_screw_offset_y = lid_height / 2
-side_screw_offset_x = outer_length/2 - 8  # near front/back edge
-
-# Side wall screw holes (Y = ±outer_width/2, X = ±side_screw_offset_x)
-for y in [outer_width/2, -outer_width/2]:
-    for x in [side_screw_offset_x, -side_screw_offset_x]:
-        base = base.faces(">Y" if y > 0 else "<Y").workplane(centerOption="CenterOfMass").center(x, (outer_height - lid_thickness)/2 - side_screw_offset_y).circle(side_screw_hole_dia_inner/2).cutThruAll()
-
 # DIN rail mounting channel on bottom of enclosure
 # Two guide walls with inward-facing L-shaped hooks form a channel
 # that snaps onto a standard TS35 DIN rail.
@@ -211,9 +216,59 @@ din_channel = fixed_wall.union(fixed_hook).union(spring_wall).union(spring_hook)
 din_channel = din_channel.edges(">Z").fillet(din_fillet_r / 2)
 base = base.union(din_channel)
 
+# Alignment ledge: narrows the cavity opening at the top so the skirt registers snugly
+base_top_z = outer_height/2 - lid_thickness
+ledge_outer = (cq.Workplane("XY")
+    .workplane(offset=base_top_z - ledge_height)
+    .rect(box_length, box_width)
+    .extrude(ledge_height))
+ledge_inner = (cq.Workplane("XY")
+    .workplane(offset=base_top_z - ledge_height)
+    .rect(box_length - 2*ledge_depth, box_width - 2*ledge_depth)
+    .extrude(ledge_height))
+base = base.union(ledge_outer.cut(ledge_inner))
+
+
+# Clip grooves in base inner X-walls (4 rectangular pockets for snap-fit bumps)
+groove_w = clip_bump_width + clip_groove_extra
+groove_h = clip_bump_height + clip_groove_extra
+lid_seated_origin_z = base_top_z - lid_height / 2
+groove_center_z = lid_seated_origin_z + (-lid_height/2 + 1.0 + clip_bump_height/2)
+
+for x_sign in [-1, 1]:
+    wall_inner_x = x_sign * box_length / 2
+    for y_pos in clip_y_positions:
+        groove = (cq.Workplane("YZ")
+            .workplane(offset=wall_inner_x)
+            .center(y_pos, groove_center_z)
+            .rect(groove_w, groove_h)
+            .extrude(x_sign * clip_groove_depth))
+        base = base.cut(groove)
+
+# Pry slots on all 4 walls for screwdriver lid removal (cut from outer face inward)
+# Y walls (front -Y and back +Y)
+for x_pos in pry_slot_x_positions:
+    for y_sign in [-1, 1]:
+        slot = (cq.Workplane("XZ")
+            .workplane(offset=y_sign * outer_width / 2)
+            .center(x_pos, base_top_z - pry_slot_height / 2)
+            .rect(pry_slot_width, pry_slot_height)
+            .extrude(-y_sign * pry_slot_depth))
+        base = base.cut(slot)
+
+# X walls (left -X and right +X)
+for y_pos in pry_slot_y_positions:
+    for x_sign in [-1, 1]:
+        slot = (cq.Workplane("YZ")
+            .workplane(offset=x_sign * outer_length / 2)
+            .center(y_pos, base_top_z - pry_slot_height / 2)
+            .rect(pry_slot_width, pry_slot_height)
+            .extrude(-x_sign * pry_slot_depth))
+        base = base.cut(slot)
+
 
 # Create lid (inset design: top plate rests on base walls, skirt fits inside)
-lid_clearance = 0.5  # mm per side for snug fit
+lid_clearance = 0.75  # mm per side (room for clip bumps)
 skirt_outer_l = box_length - 2 * lid_clearance
 skirt_outer_w = box_width - 2 * lid_clearance
 skirt_height = lid_height - lid_thickness  # skirt below the top plate
@@ -235,6 +290,19 @@ skirt_void = (cq.Workplane("XY")
     .extrude(skirt_height))
 box_lid = top_plate.union(skirt_solid.cut(skirt_void))
 
+# Snap-fit clip bumps on skirt outer X-faces
+bump_center_z = -lid_height/2 + 1.0 + clip_bump_height/2
+
+for x_sign in [-1, 1]:
+    skirt_face_x = x_sign * skirt_outer_l / 2
+    for y_pos in clip_y_positions:
+        bump = (cq.Workplane("YZ")
+            .workplane(offset=skirt_face_x)
+            .center(y_pos, bump_center_z)
+            .rect(clip_bump_width, clip_bump_height)
+            .extrude(x_sign * clip_bump_depth))
+        box_lid = box_lid.union(bump)
+
 # Add LCD cutout to lid
 box_lid = (box_lid.faces(">Z")
        .workplane()
@@ -253,17 +321,6 @@ box_lid = (box_lid.faces(">Z")
        .center(push_btn_x, push_btn_y)
        .circle(push_button_dia/2)
        .cutThruAll())
-
-# Screw holes through skirt side walls (aligned with base wall holes)
-side_screw_hole_dia_outer = 3
-for y_sign in [1, -1]:
-    for x in [side_screw_offset_x, -side_screw_offset_x]:
-        box_lid = box_lid.cut(
-            cq.Workplane("XZ")
-            .pushPoints([(x, 0)])
-            .circle(side_screw_hole_dia_outer / 2)
-            .extrude(y_sign * outer_width)
-        )
 
 # Fillet lid top edges for comfort when handling
 box_lid = box_lid.edges(">Z").fillet(lid_fillet_r / 2)

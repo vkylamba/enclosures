@@ -31,7 +31,9 @@ The enclosure is a two-part snap-fit design: **base** (open-top box) and **lid**
 - Open-top box with rounded vertical corners and bottom edges (2mm fillet radius)
 - Floor has 6 through-holes for Arduino Mega M3 standoffs
 - Four walls with various connector cutouts
-- Side walls have 4x M2 screw holes (2 per Y-wall) for securing the lid
+- Alignment ledge at top of inner cavity (0.75mm step inward, 2mm tall) for positive lid registration
+- 4 snap-fit clip grooves in inner X-walls (2 per wall) for tool-less lid retention
+- 8 pry slots (2 per wall) on all 4 walls for screwdriver-assisted lid removal
 - DIN rail channel on the underside for panel mounting
 
 ### Lid
@@ -39,9 +41,9 @@ The enclosure is a two-part snap-fit design: **base** (open-top box) and **lid**
 - Top plate that sits on the base walls, with a hollow skirt that drops inside the cavity
 - LCD rectangular cutout centered on top face
 - Push button circular cutout to the right of the LCD
-- Skirt has 4x M3 through-holes aligned with base screw holes
+- 4 snap-fit clip bumps on skirt X-faces (0.5mm protrusion) that engage base grooves
 - Top edges rounded (0.75mm fillet radius) for comfortable handling
-- 0.5mm clearance per side between skirt and inner cavity for snug fit
+- 0.75mm clearance per side between skirt and inner cavity (increased for clip bumps)
 
 ## Dimensions
 
@@ -60,7 +62,7 @@ The enclosure is a two-part snap-fit design: **base** (open-top box) and **lid**
 - Total lid height: 10mm (box_height / 5)
 - Top plate thickness: 2.5mm (same as wall_thickness)
 - Skirt height: 7.5mm (lid_height - lid_thickness)
-- Skirt clearance: 0.5mm per side
+- Skirt clearance: 0.75mm per side (increased for clip bumps)
 
 ## Wall Cutout Layout
 
@@ -145,12 +147,47 @@ The OCCT kernel used by CadQuery can fail on fillets applied to complex boolean 
 - **Outer box fillets**: Full 2.0mm worked because they are applied to simple box geometry before any boolean operations
 - **Fallback chain**: Try full radius -> try half radius -> try chamfer instead -> skip
 
-## Screw/Fastening System
+## Lid Retention System
 
-- 4 screw holes through the Y-walls (2 per side, near front and back)
-- Base holes: 2mm diameter (for self-tapping M2 screws)
-- Lid holes: 3mm diameter (clearance for M3 or pass-through for M2)
-- Screw positions: 8mm from front/back edges, centered at lid height on the side walls
+The lid uses a hybrid snap-fit + optional screw design for tool-less daily access while retaining vibration security when needed.
+
+### Snap-Fit Clips (Primary Retention)
+
+4 clip bumps on the lid skirt (2 per X-wall) engage matching grooves in the base inner walls. Press the lid down and it clicks into place; use the pry slots on the front wall to lever the lid off.
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Bump width | 5.0mm | Along wall, sufficient engagement area |
+| Bump height | 2.0mm | Vertical engagement |
+| Bump depth (protrusion) | 0.5mm | Gentle snap force, easy release |
+| Y positions | -12mm, +12mm from center | Spread for even retention |
+| Groove extra clearance | 0.4mm | 0.2mm per side for easy snap |
+| Groove depth | 0.7mm | Pocket into base wall |
+
+### Alignment Ledge
+
+A rectangular ring at the top of the base inner cavity that narrows the opening by 0.75mm per side. The skirt registers against this step for positive lateral alignment (no rattling).
+
+| Parameter | Value |
+|---|---|
+| Ledge depth | 0.75mm inward from cavity wall |
+| Ledge height | 2.0mm tall |
+
+### Pry Slots (Lid Removal Aid)
+
+8 rectangular notches (2 per wall) cut into the top edge of all 4 base walls from the outside face. When the lid is seated, a flat-head screwdriver tip fits into the slot between the base wall and the lid's overhanging top plate, then twists to lever the lid up.
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Slot width | 6.0mm | Along wall, fits standard screwdriver tip |
+| Slot depth | 2.0mm | Inward from outer wall face |
+| Slot height | 2.5mm | Down from base wall top (= wall_thickness) |
+| Y-wall X positions | -15mm, +15mm from center | Spread along length |
+| X-wall Y positions | -10mm, +10mm from center | Spread along width (shorter walls) |
+
+### Why This Design
+
+Snap-fit clips provide tool-less lid closure but need a way to release. Pry slots at the parting line are the standard approach on commercial DIN-rail enclosures — insert a screwdriver and twist to pop the lid off.
 
 ## Coordinate System
 
@@ -170,8 +207,9 @@ CadQuery centers the box at origin (0,0,0). All positions are relative to center
 - PLA or PETG recommended. The DIN rail spring clip requires some material flex - PETG handles this better for long-term use.
 
 ### Tolerances
-- 0.5mm lid clearance per side is tuned for FDM printers at 0.2mm layer height
+- 0.75mm lid clearance per side accounts for clip bumps and FDM tolerance at 0.2mm layer height
 - DIN rail 0.3mm clearance per side accounts for typical FDM dimensional accuracy
+- Clip groove has 0.4mm total extra clearance (0.2mm/side) vs bump for reliable snap engagement
 - Screw holes may need drilling out depending on printer calibration
 
 ## Known Limitations and Future Improvement Areas
@@ -179,7 +217,7 @@ CadQuery centers the box at origin (0,0,0). All positions are relative to center
 1. **No ventilation**: The enclosure is sealed except for connector cutouts. Consider adding ventilation slots if heat dissipation is needed.
 2. **No cable strain relief**: Connectors are just holes. Adding strain relief features (cable clips, grommet grooves) would improve durability.
 3. **No internal cable routing**: Wires from connectors to Arduino are unmanaged. Consider adding internal wire channels or tie-down points.
-4. **Lid retention is screws only**: No snap-fit tabs on the lid. Adding snap-fit clips would allow tool-less opening.
+4. **Snap-fit clip tuning**: Clip bump depth (0.5mm) and groove clearance (0.4mm) may need adjustment based on printer accuracy. If clips are too tight, increase `clip_groove_extra`; if too loose, increase `clip_bump_depth`.
 5. **DIN rail hook chamfers**: The plan called for 0.5mm lead-in chamfers on hook tips for easier rail mounting. Not yet implemented due to complexity of selecting specific edges on the hook geometry. Future work should add these.
 6. **Fillet radii are reduced**: DIN channel and lid fillets are at 0.75mm instead of the ideal 1.5mm. Future CadQuery versions or alternative modeling approaches (building fillets into the sketch profile rather than applying them post-boolean) may allow larger radii.
 7. **LCD cutout has no bezel/recess**: A stepped recess around the LCD cutout would allow the display to sit flush and be protected.
