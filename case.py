@@ -4,7 +4,23 @@ import cadquery as cq
 box_length = 103  # mm
 box_width = 54    # mm
 box_height = 50   # mm
-wall_thickness = 2
+wall_thickness = 2.5  # increased for DIN rail strength
+
+# DIN rail channel parameters (TS35 standard - enclosure snaps onto 35mm DIN rail)
+din_rail_width = 35.0           # TS35 standard rail width (mm)
+din_clearance = 0.3             # clearance per side for slide fit (mm)
+din_channel_inner = din_rail_width + 2 * din_clearance  # inner channel width
+din_guide_height = 10.0         # guide wall height below enclosure (mm)
+din_fixed_thick = 3.0           # fixed hook side wall thickness (mm)
+din_spring_thick = 2.0          # spring clip wall thickness - thinner for flex (mm)
+din_hook_reach = 2.5            # inward hook depth to catch rail lip (mm)
+din_hook_thick = 1.5            # vertical thickness of hook shelf (mm)
+din_spring_interference = 0.3   # extra reach on spring side for snap-fit (mm)
+
+# Fillet parameters
+ext_fillet_r = 2.0      # outer vertical corners + bottom edges
+lid_fillet_r = 1.5      # lid outer edges
+din_fillet_r = 1.5      # DIN rail wall-to-base junction strength
 
 # Outer dimensions (box_length/width/height are inner cavity dimensions)
 outer_length = box_length + 2 * wall_thickness
@@ -50,6 +66,8 @@ screw_offset = 8  # distance from each edge
 
 # Create base (box without top wall)
 outer = cq.Workplane("XY").box(outer_length, outer_width, outer_height)
+outer = outer.edges("|Z").fillet(ext_fillet_r)   # 4 vertical corners → round
+outer = outer.edges("<Z").fillet(ext_fillet_r)   # bottom edges → round
 inner = (cq.Workplane("XY")
          .workplane(offset=-outer_height/2 + wall_thickness)
          .rect(box_length, box_width)
@@ -145,6 +163,54 @@ for y in [outer_width/2, -outer_width/2]:
     for x in [side_screw_offset_x, -side_screw_offset_x]:
         base = base.faces(">Y" if y > 0 else "<Y").workplane(centerOption="CenterOfMass").center(x, (outer_height - lid_thickness)/2 - side_screw_offset_y).circle(side_screw_hole_dia_inner/2).cutThruAll()
 
+# DIN rail mounting channel on bottom of enclosure
+# Two guide walls with inward-facing L-shaped hooks form a channel
+# that snaps onto a standard TS35 DIN rail.
+# Fixed hook side hooks first, then spring clip side snaps on.
+din_channel_len = outer_length - 10  # slightly shorter than enclosure
+base_z = -outer_height / 2
+
+# --- Fixed hook side (positive Y) ---
+# Guide wall extending downward from enclosure bottom
+fw_inner = din_channel_inner / 2
+fw_outer = fw_inner + din_fixed_thick
+fixed_wall = (cq.Workplane("XY")
+    .workplane(offset=base_z)
+    .center(0, (fw_inner + fw_outer) / 2)
+    .rect(din_channel_len, din_fixed_thick)
+    .extrude(-din_guide_height))
+
+# Fixed hook: horizontal shelf at bottom of wall, extending inward
+fh_inner = fw_inner - din_hook_reach
+fixed_hook = (cq.Workplane("XY")
+    .workplane(offset=base_z - din_guide_height)
+    .center(0, (fh_inner + fw_outer) / 2)
+    .rect(din_channel_len, fw_outer - fh_inner)
+    .extrude(din_hook_thick))
+
+# --- Spring clip side (negative Y) ---
+# Guide wall - thinner than fixed side to allow flex for snap-on
+sw_inner = -din_channel_inner / 2
+sw_outer = sw_inner - din_spring_thick
+spring_wall = (cq.Workplane("XY")
+    .workplane(offset=base_z)
+    .center(0, (sw_inner + sw_outer) / 2)
+    .rect(din_channel_len, din_spring_thick)
+    .extrude(-din_guide_height))
+
+# Spring hook: extends inward with extra interference for snap-fit
+sh_inner = sw_inner + din_hook_reach + din_spring_interference
+spring_hook = (cq.Workplane("XY")
+    .workplane(offset=base_z - din_guide_height)
+    .center(0, (sw_outer + sh_inner) / 2)
+    .rect(din_channel_len, sh_inner - sw_outer)
+    .extrude(din_hook_thick))
+
+# Combine channel parts and union with base
+din_channel = fixed_wall.union(fixed_hook).union(spring_wall).union(spring_hook)
+din_channel = din_channel.edges(">Z").fillet(din_fillet_r / 2)
+base = base.union(din_channel)
+
 
 # Create lid (inset design: top plate rests on base walls, skirt fits inside)
 lid_clearance = 0.5  # mm per side for snug fit
@@ -198,6 +264,9 @@ for y_sign in [1, -1]:
             .circle(side_screw_hole_dia_outer / 2)
             .extrude(y_sign * outer_width)
         )
+
+# Fillet lid top edges for comfort when handling
+box_lid = box_lid.edges(">Z").fillet(lid_fillet_r / 2)
 
 def create_visualization_notebook(model, output_dir="wall_views"):
     """
