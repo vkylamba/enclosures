@@ -25,6 +25,9 @@ MEGA_MOUNTS = [
     (88.9, 48.2),   # Third from top left
 ]
 MOUNT_DIA = 3.2  # mm, diameter of mounting holes (slightly larger than M3 screws for clearance)
+MOUNT_BOSS_DIA = 3.8  # mm, locator boss sized to fit Arduino 4mm board holes
+MOUNT_BOSS_HEIGHT = 3.0  # mm, standoff height above inner floor
+MOUNT_BOSS_PILOT_DIA = 2.4  # mm, pilot hole for self-tapping screw
 
 # Side-wall connector specs from case.py / drawing notes (mm)
 USB_CUT_W = 10
@@ -111,14 +114,24 @@ base = outer.cut(inner)
 # Remove the top wall from the base
 base = base.faces(">Z").workplane(-LID_THICKNESS).split(keepBottom=True)
 
-# Mounting holes on bottom wall (inside)
+# Mounting bosses on bottom wall (inside)
 for (x, y) in MEGA_MOUNTS:
-    base = base.cut(
+    base = base.union(
         cq.Workplane("XY")
         .workplane(offset=-OUTER_HEIGHT/2 + WALL_THICKNESS)
         .pushPoints([(x - BOARD_RAW_LENGTH/2, y - BOARD_RAW_WIDTH/2)])
-        .circle(MOUNT_DIA/2)
-        .extrude(-WALL_THICKNESS)
+        .circle(MOUNT_BOSS_DIA/2)
+        .extrude(MOUNT_BOSS_HEIGHT)
+    )
+
+# Pilot holes in bosses for screw fastening
+for (x, y) in MEGA_MOUNTS:
+    base = base.cut(
+        cq.Workplane("XY")
+        .workplane(offset=-OUTER_HEIGHT/2 + WALL_THICKNESS + MOUNT_BOSS_HEIGHT)
+        .pushPoints([(x - BOARD_RAW_LENGTH/2, y - BOARD_RAW_WIDTH/2)])
+        .circle(MOUNT_BOSS_PILOT_DIA/2)
+        .extrude(-MOUNT_BOSS_HEIGHT)
     )
 
 # Power barrel jack: 9mm diameter from bottom and left-side horizontal offset

@@ -32,7 +32,9 @@ MEGA_MOUNTS = [
     (88.9, 48.2),   # Third from top left
 ]
 
-MOUNT_DIA = 3
+MOUNT_BOSS_DIA = 3.8
+MOUNT_BOSS_HEIGHT = 3
+MOUNT_BOSS_PILOT_DIA = 2.4
 
 # Side-wall connector specs from case.py / drawing notes (mm)
 USB_CUT_W = 10
@@ -179,42 +181,54 @@ class TestBaseEnclosure(unittest.TestCase):
                 f"Board corner {pt.toTuple()} should be inside cavity, not wall",
             )
 
-    def test_base_has_mounting_holes(self):
-        """Base floor must have through-holes per the board drawing pattern."""
+    def test_base_has_mounting_bosses(self):
+        """Base floor must have screwable mounting bosses per the board drawing pattern."""
         self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
         floor_bottom_z = _shell_floor_bottom_z(bbox)
-
-        floor_mid_z = floor_bottom_z + WALL_THICKNESS / 2  # mid-floor height
+        boss_mid_z = floor_bottom_z + WALL_THICKNESS + MOUNT_BOSS_HEIGHT / 2
 
         for mx, my in MEGA_MOUNTS:
             # Convert drawing coords (origin board bottom-left) to centered model XY.
             cx = mx - BOARD_RAW_LENGTH / 2
             cy = my - BOARD_RAW_WIDTH / 2
 
-            # Centre of mounting hole should be air (drilled through)
-            hole_pt = cq.Vector(cx, cy, floor_mid_z)
+            # Centre should be pilot-hole air for screw entry.
+            boss_pt = cq.Vector(cx, cy, boss_mid_z)
             self.assertFalse(
-                shape.isInside(hole_pt),
-                f"Mount hole centre ({mx},{my}) at {hole_pt.toTuple()} "
-                "should be drilled through, but is solid",
+                shape.isInside(boss_pt),
+                f"Mount boss centre ({mx},{my}) at {boss_pt.toTuple()} "
+                "should be pilot-hole air, but is solid",
             )
 
-            # A point offset from the hole by more than its radius should be
-            # solid floor (confirms material exists around the hole).
-            offset = MOUNT_DIA / 2 + 1.2
-            neighbour_pts = [
-                cq.Vector(cx + offset, cy, floor_mid_z),
-                cq.Vector(cx - offset, cy, floor_mid_z),
-                cq.Vector(cx, cy + offset, floor_mid_z),
-                cq.Vector(cx, cy - offset, floor_mid_z),
+            # Ring between pilot and outer diameter should be solid material.
+            ring_offset = (MOUNT_BOSS_PILOT_DIA / 2 + MOUNT_BOSS_DIA / 2) / 2
+            ring_pts = [
+                cq.Vector(cx + ring_offset, cy, boss_mid_z),
+                cq.Vector(cx - ring_offset, cy, boss_mid_z),
+                cq.Vector(cx, cy + ring_offset, boss_mid_z),
+                cq.Vector(cx, cy - ring_offset, boss_mid_z),
             ]
             self.assertTrue(
-                any(shape.isInside(pt) for pt in neighbour_pts),
-                f"No solid floor found around mount ({mx},{my}); "
-                "hole placement may be incorrect",
+                all(shape.isInside(pt) for pt in ring_pts),
+                f"No solid boss ring found around mount ({mx},{my}); "
+                "boss diameter/pilot may be incorrect",
+            )
+
+            # Outside boss radius should be cavity air at boss mid-height.
+            outer_offset = MOUNT_BOSS_DIA / 2 + 1.2
+            outside_pts = [
+                cq.Vector(cx + outer_offset, cy, boss_mid_z),
+                cq.Vector(cx - outer_offset, cy, boss_mid_z),
+                cq.Vector(cx, cy + outer_offset, boss_mid_z),
+                cq.Vector(cx, cy - outer_offset, boss_mid_z),
+            ]
+            self.assertTrue(
+                any(not shape.isInside(pt) for pt in outside_pts),
+                f"No cavity clearance found outside boss ({mx},{my}); "
+                "boss diameter/placement may be incorrect",
             )
 
     def test_side_wall_has_usb_power_and_rj45_holes(self):
