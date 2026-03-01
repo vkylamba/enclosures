@@ -12,7 +12,6 @@ HAT_HEIGHT = 20  # mm
 WALL_THICKNESS = 2.5
 BOARD_RAW_LENGTH = 102.7
 BOARD_RAW_WIDTH = 54.5
-DIN_GUIDE_HEIGHT = 10
 
 # Arduino Mega board drawing dimensions from reference PNG (mm)
 BOX_LENGTH = BOARD_RAW_LENGTH + 1.5  # add margin for silkscreen and measurement uncertainty
@@ -57,6 +56,10 @@ AUDIO_JACK_SPACING_CENTER_TO_CENTER = 12.8
 NUMBER_OF_AUDIO_JACKS = 4
 EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 24.5
 
+# Bottom DIN clamp mounting holes
+DIN_CLAMP_HOLE_DIA = 4.2
+DIN_CLAMP_HOLE_SPACING = 70.0
+
 
 def _load_shape():
     shape = cq.importers.importStep(str(BASE_STEP_PATH))
@@ -66,7 +69,7 @@ def _load_shape():
 
 
 def _shell_floor_bottom_z(bbox):
-    # Enclosure shell height (without DIN rail): cavity + floor thickness
+    # Enclosure shell height: cavity + floor thickness
     return bbox.zmax - (BOX_HEIGHT + WALL_THICKNESS)
 
 
@@ -83,12 +86,12 @@ class TestBaseEnclosure(unittest.TestCase):
         floor_bottom_z = _shell_floor_bottom_z(bbox)
         floor_top_z = floor_bottom_z + WALL_THICKNESS
         inner_height = bbox.zmax - floor_top_z
-        din_extension = floor_bottom_z - bbox.zmin
+        base_bottom_offset = floor_bottom_z - bbox.zmin
 
         self.assertAlmostEqual(inner_length, BOX_LENGTH, delta=0.2)
         self.assertAlmostEqual(inner_width, BOX_WIDTH, delta=0.2)
         self.assertAlmostEqual(inner_height, BOX_HEIGHT, delta=0.2)
-        self.assertAlmostEqual(din_extension, DIN_GUIDE_HEIGHT, delta=0.2)
+        self.assertAlmostEqual(base_bottom_offset, 0.0, delta=0.2)
 
         self.assertLessEqual(BOX_LENGTH, inner_length)
         self.assertLessEqual(BOX_WIDTH, inner_width)
@@ -357,6 +360,42 @@ class TestBaseEnclosure(unittest.TestCase):
                 any(shape.isInside(pt) for pt in surround_pts),
                 f"No wall material around extra audio jack at y={wall_y:.2f}",
             )
+
+    def test_bottom_has_two_din_clamp_mounting_holes(self):
+        """Bottom floor must include two screw holes for DIN clamp mounting."""
+        self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
+
+        shape = _load_shape()
+        bbox = shape.BoundingBox()
+
+        hole_x = DIN_CLAMP_HOLE_SPACING / 2
+        floor_mid_z = bbox.zmin + WALL_THICKNESS / 2
+
+        for x in (-hole_x, hole_x):
+            center_pt = cq.Vector(x, 0, floor_mid_z)
+            self.assertFalse(
+                shape.isInside(center_pt),
+                f"Bottom clamp hole centre {center_pt.toTuple()} should be open",
+            )
+
+            ring_offset = DIN_CLAMP_HOLE_DIA / 2 + 1.2
+            ring_pts = [
+                cq.Vector(x + ring_offset, 0, floor_mid_z),
+                cq.Vector(x - ring_offset, 0, floor_mid_z),
+                cq.Vector(x, ring_offset, floor_mid_z),
+                cq.Vector(x, -ring_offset, floor_mid_z),
+            ]
+            self.assertTrue(
+                any(shape.isInside(pt) for pt in ring_pts),
+                f"No floor material around bottom clamp hole at x={x:.2f}",
+            )
+
+        # Ensure these are two separate holes rather than one merged slot.
+        midpoint_pt = cq.Vector(0, 0, floor_mid_z)
+        self.assertTrue(
+            shape.isInside(midpoint_pt),
+            f"Point {midpoint_pt.toTuple()} between clamp holes should remain solid",
+        )
 
 
 if __name__ == "__main__":

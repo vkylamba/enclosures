@@ -50,22 +50,14 @@ AUDIO_JACK_SPACING_CENTER_TO_CENTER = 12.8
 NUMBER_OF_AUDIO_JACKS = 4
 EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 24.5
 
+# Bottom mounting holes for external DIN rail clamps (2x)
+DIN_CLAMP_HOLE_DIA = 4.2       # mm, M4-style clearance
+DIN_CLAMP_HOLE_SPACING = 70.0  # mm, center-to-center along enclosure length
 
-# DIN rail channel parameters (TS35 standard - enclosure snaps onto 35mm DIN rail)
-DIN_RAIL_WIDTH = 35.0           # TS35 standard rail width (mm)
-DIN_CLEARANCE = 0.3             # clearance per side for slide fit (mm)
-DIN_CHANNEL_INNER = DIN_RAIL_WIDTH + 2 * DIN_CLEARANCE  # inner channel width
-DIN_GUIDE_HEIGHT = 10.0         # guide wall height below enclosure (mm)
-DIN_FIXED_THICK = 3.0           # fixed hook side wall thickness (mm)
-DIN_SPRING_THICK = 2.0          # spring clip wall thickness - thinner for flex (mm)
-DIN_HOOK_REACH = 2.5            # inward hook depth to catch rail lip (mm)
-DIN_HOOK_THICK = 1.5            # vertical thickness of hook shelf (mm)
-DIN_SPRING_INTERFERENCE = 0.3   # extra reach on spring side for snap-fit (mm)
 
 # Fillet parameters
 EXT_FILLET_R = 2.0      # outer vertical corners + bottom edges
 LID_FILLET_R = 1.5      # lid outer edges
-DIN_FILLET_R = 1.5      # DIN rail wall-to-base junction strength
 
 # Outer dimensions (box_length/width/height are inner cavity dimensions)
 OUTER_LENGTH = BOX_LENGTH + 2 * WALL_THICKNESS
@@ -87,6 +79,7 @@ CLIP_BUMP_WIDTH = 5.0          # mm along wall
 CLIP_BUMP_HEIGHT = 2.0         # mm in Z
 CLIP_BUMP_DEPTH = 0.5          # mm protrusion from skirt
 CLIP_Y_POSITIONS = [-12, 12]   # mm from center, on each X-wall
+CLIP_X_POSITIONS = [-20, 20]   # mm from center, on each Y-wall
 CLIP_GROOVE_EXTRA = 0.4        # total clearance added to groove vs bump (0.2/side)
 CLIP_GROOVE_DEPTH = 0.7        # mm pocket into base wall
 
@@ -199,54 +192,15 @@ extra_jack_hole = (cq.Workplane("XZ")
                    .extrude(OUTER_WIDTH + 2 * WALL_THICKNESS, both=True))
 base = base.cut(extra_jack_hole)
 
-
-# DIN rail mounting channel on bottom of enclosure
-# Two guide walls with inward-facing L-shaped hooks form a channel
-# that snaps onto a standard TS35 DIN rail.
-# Fixed hook side hooks first, then spring clip side snaps on.
-din_channel_len = OUTER_LENGTH - 10  # slightly shorter than enclosure
-base_z = -OUTER_HEIGHT / 2
-
-# --- Fixed hook side (positive Y) ---
-# Guide wall extending downward from enclosure bottom
-fw_inner = DIN_CHANNEL_INNER / 2
-fw_outer = fw_inner + DIN_FIXED_THICK
-fixed_wall = (cq.Workplane("XY")
-    .workplane(offset=base_z)
-    .center(0, (fw_inner + fw_outer) / 2)
-    .rect(din_channel_len, DIN_FIXED_THICK)
-    .extrude(-DIN_GUIDE_HEIGHT))
-
-# Fixed hook: horizontal shelf at bottom of wall, extending inward
-fh_inner = fw_inner - DIN_HOOK_REACH
-fixed_hook = (cq.Workplane("XY")
-    .workplane(offset=base_z - DIN_GUIDE_HEIGHT)
-    .center(0, (fh_inner + fw_outer) / 2)
-    .rect(din_channel_len, fw_outer - fh_inner)
-    .extrude(DIN_HOOK_THICK))
-
-# --- Spring clip side (negative Y) ---
-# Guide wall - thinner than fixed side to allow flex for snap-on
-sw_inner = -DIN_CHANNEL_INNER / 2
-sw_outer = sw_inner - DIN_SPRING_THICK
-spring_wall = (cq.Workplane("XY")
-    .workplane(offset=base_z)
-    .center(0, (sw_inner + sw_outer) / 2)
-    .rect(din_channel_len, DIN_SPRING_THICK)
-    .extrude(-DIN_GUIDE_HEIGHT))
-
-# Spring hook: extends inward with extra interference for snap-fit
-sh_inner = sw_inner + DIN_HOOK_REACH + DIN_SPRING_INTERFERENCE
-spring_hook = (cq.Workplane("XY")
-    .workplane(offset=base_z - DIN_GUIDE_HEIGHT)
-    .center(0, (sw_outer + sh_inner) / 2)
-    .rect(din_channel_len, sh_inner - sw_outer)
-    .extrude(DIN_HOOK_THICK))
-
-# Combine channel parts and union with base
-din_channel = fixed_wall.union(fixed_hook).union(spring_wall).union(spring_hook)
-din_channel = din_channel.edges(">Z").fillet(DIN_FILLET_R / 2)
-base = base.union(din_channel)
+# Two through-holes in the bottom floor for screw-mounting DIN rail clamps
+din_hole_x = DIN_CLAMP_HOLE_SPACING / 2
+din_hole_points = [(-din_hole_x, 0), (din_hole_x, 0)]
+din_hole_cuts = (cq.Workplane("XY")
+    .workplane(offset=-OUTER_HEIGHT / 2)
+    .pushPoints(din_hole_points)
+    .circle(DIN_CLAMP_HOLE_DIA / 2)
+    .extrude(WALL_THICKNESS + 1.0))
+base = base.cut(din_hole_cuts)
 
 # Alignment ledge: narrows the cavity opening at the top so the skirt registers snugly
 base_top_z = OUTER_HEIGHT/2 - LID_THICKNESS
@@ -275,6 +229,17 @@ for x_sign in [-1, 1]:
             .center(y_pos, groove_center_z)
             .rect(groove_w, groove_h)
             .extrude(x_sign * CLIP_GROOVE_DEPTH))
+        base = base.cut(groove)
+
+# Clip grooves in base inner Y-walls (4 rectangular pockets for snap-fit bumps)
+for y_sign in [-1, 1]:
+    wall_inner_y = y_sign * BOX_WIDTH / 2
+    for x_pos in CLIP_X_POSITIONS:
+        groove = (cq.Workplane("XZ")
+            .workplane(offset=wall_inner_y)
+            .center(x_pos, groove_center_z)
+            .rect(groove_w, groove_h)
+            .extrude(y_sign * CLIP_GROOVE_DEPTH))
         base = base.cut(groove)
 
 # Pry slots on all 4 walls for screwdriver lid removal (cut from outer face inward)
@@ -333,6 +298,17 @@ for x_sign in [-1, 1]:
             .center(y_pos, bump_center_z)
             .rect(CLIP_BUMP_WIDTH, CLIP_BUMP_HEIGHT)
             .extrude(x_sign * CLIP_BUMP_DEPTH))
+        box_lid = box_lid.union(bump)
+
+# Snap-fit clip bumps on skirt outer Y-faces
+for y_sign in [-1, 1]:
+    skirt_face_y = y_sign * skirt_outer_w / 2
+    for x_pos in CLIP_X_POSITIONS:
+        bump = (cq.Workplane("XZ")
+            .workplane(offset=skirt_face_y)
+            .center(x_pos, bump_center_z)
+            .rect(CLIP_BUMP_WIDTH, CLIP_BUMP_HEIGHT)
+            .extrude(y_sign * CLIP_BUMP_DEPTH))
         box_lid = box_lid.union(bump)
 
 # Add LCD cutout to lid
