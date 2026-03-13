@@ -10,8 +10,8 @@ BASE_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_base.step"
 # Arduino Mega hat footprint dimensions from measurements and reference PNG (mm)
 HAT_HEIGHT = 20  # mm
 WALL_THICKNESS = 2.5
-BOARD_RAW_LENGTH = 102.7
-BOARD_RAW_WIDTH = 54.5
+BOARD_RAW_LENGTH = 105
+BOARD_RAW_WIDTH = 55.5
 
 # Arduino Mega board drawing dimensions from reference PNG (mm)
 BOX_LENGTH = BOARD_RAW_LENGTH + 1.5  # add margin for silkscreen and measurement uncertainty
@@ -23,12 +23,12 @@ BOX_HEIGHT = 50  # mm, from case.py
 # where holes exist at: left(top,bottom), middle(mid,bottom), right(top,bottom).
 
 MEGA_MOUNTS = [
-    (14.0, 2.5),    # First from bottom left
-    (15.3, 50.8),   # First from top left
-    (64.8, 7.6),    # Second from bottom left
-    (64.8, 35.5),   # Second from top left
-    (93.0, 2.5),    # Third from bottom left
-    (88.9, 48.2),   # Third from top left
+    (14.75, 3.25),   # First from bottom left
+    (16.05, 51.55),  # First from top left
+    (65.55, 8.35),   # Second from bottom left
+    (65.55, 36.25),  # Second from top left
+    (93.75, 3.25),   # Third from bottom left
+    (89.65, 48.95),  # Third from top left
 ]
 
 MOUNT_BOSS_DIA = 3.8
@@ -36,25 +36,35 @@ MOUNT_BOSS_HEIGHT = 3
 MOUNT_BOSS_PILOT_DIA = 2.4
 
 # Side-wall connector specs from case.py / drawing notes (mm)
-USB_CUT_W = 10
-USB_CUT_H = 5
-RJ45_CUT_W = 16
-RJ45_CUT_H = 14
-RJ45_GAP = 10
-POWER_JACK_DIA = 9
+USB_CUT_W = 15
+USB_CUT_H = 8
+RJ45_CUT_W = 15
+RJ45_CUT_H = 15
+RJ45_GAP = 9
+POWER_JACK_W = 10
+POWER_JACK_H = 15
 
 # Offsets on YZ side-wall sketch in case.py (mm)
 USB_FROM_RIGHT = 13.5
-POWER_FROM_LEFT = 5
-BOTTOM_OFFSET = 5.5
+POWER_FROM_LEFT = 8
+BOTTOM_OFFSET = 7
 
 # Audio Jack from left
 AUDIO_JACK_DIA = 6
-AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM = 14
-FIRST_AUDIO_JACK_CENTER_FROM_LEFT = 7.5
-AUDIO_JACK_SPACING_CENTER_TO_CENTER = 12.8
+AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM = 16
+FIRST_AUDIO_JACK_CENTER_FROM_LEFT = 8
+AUDIO_JACK_SPACING_1_TO_2 = 12.8
+AUDIO_JACK_SPACING_2_TO_3 = 16.4
+AUDIO_JACK_SPACING_3_TO_4 = 12.8
 NUMBER_OF_AUDIO_JACKS = 4
-EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 24.5
+EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 26.5
+
+JACKS_DISTANCES_FROM_WALL = [
+    0,
+    AUDIO_JACK_SPACING_1_TO_2,
+    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3,
+    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3 + AUDIO_JACK_SPACING_3_TO_4,
+]
 
 # Bottom DIN clamp mounting holes
 DIN_CLAMP_HOLE_DIA = 4.2
@@ -97,7 +107,7 @@ class TestBaseEnclosure(unittest.TestCase):
         self.assertLessEqual(BOX_WIDTH, inner_width)
 
         self.assertLessEqual(USB_FROM_RIGHT + USB_CUT_W / 2, inner_width)
-        self.assertLessEqual(POWER_FROM_LEFT + POWER_JACK_DIA / 2, inner_width)
+        self.assertLessEqual(POWER_FROM_LEFT + POWER_JACK_W / 2, inner_width)
         self.assertLessEqual(
             BOTTOM_OFFSET + USB_CUT_H + RJ45_GAP + RJ45_CUT_H,
             inner_height,
@@ -105,7 +115,7 @@ class TestBaseEnclosure(unittest.TestCase):
 
         last_audio_center = (
             FIRST_AUDIO_JACK_CENTER_FROM_LEFT
-            + (NUMBER_OF_AUDIO_JACKS - 1) * AUDIO_JACK_SPACING_CENTER_TO_CENTER
+            + JACKS_DISTANCES_FROM_WALL[-1]
         )
         self.assertLessEqual(last_audio_center, inner_width)
         self.assertLessEqual(EXTRA_AUDIO_JACK_CENTER_FROM_LEFT, inner_length)
@@ -251,8 +261,8 @@ class TestBaseEnclosure(unittest.TestCase):
         rj45_center_y = usb_center_y
         rj45_center_z = usb_center_z + USB_CUT_H / 2 + RJ45_GAP + RJ45_CUT_H / 2
 
-        power_center_y = bbox.ymin + POWER_FROM_LEFT + POWER_JACK_DIA / 2
-        power_center_z = floor_bottom_z + BOTTOM_OFFSET + POWER_JACK_DIA / 2
+        power_center_y = bbox.ymin + POWER_FROM_LEFT + POWER_JACK_W / 2
+        power_center_z = floor_bottom_z + BOTTOM_OFFSET + POWER_JACK_H / 2
 
         # RJ45 should sit above USB on the same wall.
         self.assertGreater(
@@ -263,7 +273,7 @@ class TestBaseEnclosure(unittest.TestCase):
         connectors = [
             ("USB", usb_center_y, usb_center_z, USB_CUT_W / 2, USB_CUT_H / 2),
             ("RJ45", rj45_center_y, rj45_center_z, RJ45_CUT_W / 2, RJ45_CUT_H / 2),
-            ("Power", power_center_y, power_center_z, POWER_JACK_DIA / 2, POWER_JACK_DIA / 2),
+            ("Power", power_center_y, power_center_z, POWER_JACK_W / 2, POWER_JACK_H / 2),
         ]
 
         for name, center_y, center_z, half_w, half_h in connectors:
@@ -304,7 +314,7 @@ class TestBaseEnclosure(unittest.TestCase):
         jack_radius = AUDIO_JACK_DIA / 2
         jack_centres_y = [
             bbox.ymin + FIRST_AUDIO_JACK_CENTER_FROM_LEFT
-            + index * AUDIO_JACK_SPACING_CENTER_TO_CENTER
+            + JACKS_DISTANCES_FROM_WALL[index]
             for index in range(NUMBER_OF_AUDIO_JACKS)
         ]
         jack_center_z = floor_bottom_z + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM + BOTTOM_OFFSET

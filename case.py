@@ -4,10 +4,11 @@ import cadquery as cq
 # Arduino Mega hat footprint dimensions from measurements and reference PNG (mm)
 HAT_HEIGHT = 20  # mm
 WALL_THICKNESS = 2.5
-BOARD_RAW_LENGTH = 102.7
-BOARD_RAW_WIDTH = 54.5
 
 # Arduino Mega board drawing dimensions from reference PNG (mm)
+# Keep these aligned with tests: 106.5 x 57.0 inner cavity.
+BOARD_RAW_LENGTH = 105.0
+BOARD_RAW_WIDTH = 55.5
 BOX_LENGTH = BOARD_RAW_LENGTH + 1.5  # add margin for silkscreen and measurement uncertainty
 BOX_WIDTH = BOARD_RAW_WIDTH + 1.5  # add margin for silkscreen and measurement uncertainty
 BOX_HEIGHT = 50  # mm, from case.py
@@ -17,12 +18,12 @@ BOX_HEIGHT = 50  # mm, from case.py
 # where holes exist at: left(top,bottom), middle(mid,bottom), right(top,bottom).
 
 MEGA_MOUNTS = [
-    (14.0, 2.5),    # First from bottom left
-    (15.3, 50.8),   # First from top left
-    (64.8, 7.6),    # Second from bottom left
-    (64.8, 35.5),   # Second from top left
-    (93.0, 2.5),    # Third from bottom left
-    (88.9, 48.2),   # Third from top left
+    (14.75, 3.25),   # First from bottom left
+    (16.05, 51.55),  # First from top left
+    (65.55, 8.35),   # Second from bottom left
+    (65.55, 36.25),  # Second from top left
+    (93.75, 3.25),   # Third from bottom left
+    (89.65, 48.95),  # Third from top left
 ]
 MOUNT_DIA = 3.2  # mm, diameter of mounting holes (slightly larger than M3 screws for clearance)
 MOUNT_BOSS_DIA = 3.8  # mm, locator boss sized to fit Arduino 4mm board holes
@@ -30,25 +31,35 @@ MOUNT_BOSS_HEIGHT = 3.0  # mm, standoff height above inner floor
 MOUNT_BOSS_PILOT_DIA = 2.4  # mm, pilot hole for self-tapping screw
 
 # Side-wall connector specs from case.py / drawing notes (mm)
-USB_CUT_W = 10
-USB_CUT_H = 5
-RJ45_CUT_W = 16
-RJ45_CUT_H = 14
-RJ45_GAP = 10
-POWER_JACK_DIA = 9
+USB_CUT_W = 15
+USB_CUT_H = 8
+RJ45_CUT_W = 15
+RJ45_CUT_H = 15
+RJ45_GAP = 9  # mm gap between USB and RJ45 cutouts
+POWER_JACK_W = 10
+POWER_JACK_H = 15
 
 # Offsets on YZ side-wall sketch in case.py (mm)
 USB_FROM_RIGHT = 13.5
-POWER_FROM_LEFT = 5
-BOTTOM_OFFSET = 5.5
+POWER_FROM_LEFT = 8
+BOTTOM_OFFSET = 7
 
 # Audio Jack from left
 AUDIO_JACK_DIA = 6
-AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM = 14
-FIRST_AUDIO_JACK_CENTER_FROM_LEFT = 7.5
-AUDIO_JACK_SPACING_CENTER_TO_CENTER = 12.8
+AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM = 16
+FIRST_AUDIO_JACK_CENTER_FROM_LEFT = 8
+AUDIO_JACK_SPACING_1_TO_2 = 12.8
+AUDIO_JACK_SPACING_2_TO_3 = 16.4
+AUDIO_JACK_SPACING_3_TO_4 = 12.8
 NUMBER_OF_AUDIO_JACKS = 4
-EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 24.5
+EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 26.5
+
+JACKS_DISTANCES_FROM_WALL =[
+    0,
+    AUDIO_JACK_SPACING_1_TO_2,
+    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3, 
+    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3 + AUDIO_JACK_SPACING_3_TO_4
+]
 
 # Bottom mounting holes for external DIN rail clamps (2x)
 DIN_CLAMP_HOLE_DIA = 4.2       # mm, M4-style clearance
@@ -74,14 +85,29 @@ PUSH_BUTTON_DIA = 7  # mm, panel-mount momentary button
 # Parameters for lid
 LID_THICKNESS = WALL_THICKNESS
 
+# LCD holder clip parameters on cap inner side
+LCD_MODULE_OUTER_W = 80.0
+LCD_MODULE_OUTER_H = 35.7
+LCD_MODULE_HEIGHT = 8.5
+LCD_CLIP_EDGE_INSET = 1.5
+LCD_CLIP_SPAN = 8.0
+LCD_CLIP_THICKNESS = 3.0
+LCD_CLIP_HOLD_OVERLAP = 1.0
+LCD_CLIP_DEPTH = LCD_MODULE_HEIGHT - LCD_CLIP_HOLD_OVERLAP + 0.3
+LCD_PCB_THICKNESS = 1.6
+LCD_CLIP_GROOVE_DEPTH = 1.2
+LCD_CLIP_GROOVE_MARGIN = 0.6
+LCD_CLIP_GROOVE_TOP_OFFSET = 2.0
+LCD_CLIP_SNAP_LIP = 0.7
+LCD_CLIP_SNAP_LIP_HEIGHT = 1.0
+LCD_CLIP_SNAP_LIP_Z_OFFSET = 1.0
+
 # Snap-fit clip parameters
 CLIP_BUMP_WIDTH = 5.0          # mm along wall
 CLIP_BUMP_HEIGHT = 2.0         # mm in Z
 CLIP_BUMP_DEPTH = 0.5          # mm protrusion from skirt
 CLIP_Y_POSITIONS = [-12, 12]   # mm from center, on each X-wall
 CLIP_X_POSITIONS = [-20, 20]   # mm from center, on each Y-wall
-CLIP_GROOVE_EXTRA = 0.4        # total clearance added to groove vs bump (0.2/side)
-CLIP_GROOVE_DEPTH = 0.7        # mm pocket into base wall
 
 # Alignment ledge
 LEDGE_DEPTH = 0.75             # mm step inward from cavity wall at top
@@ -127,18 +153,16 @@ for (x, y) in MEGA_MOUNTS:
         .extrude(-MOUNT_BOSS_HEIGHT)
     )
 
-# Power barrel jack: 9mm diameter from bottom and left-side horizontal offset
+# Power input cutout: rectangular 10mm (width) x 15mm (height).
 # On YZ wall sketch: first coord is horizontal across wall, second is vertical.
-power_jack_dia = 9
-# In CadQuery, Y=0 is box center, so:
-power_center_y = - OUTER_HEIGHT / 2 + power_jack_dia / 2 + BOTTOM_OFFSET
-# Horizontal placement from left side of wall
-power_center_z = -OUTER_WIDTH / 2 + power_jack_dia / 2 + POWER_FROM_LEFT
+# Keep the same left/bottom reference convention as the prior circular cutout.
+power_center_y = - OUTER_HEIGHT / 2 + POWER_JACK_H / 2 + BOTTOM_OFFSET
+power_center_z = -OUTER_WIDTH / 2 + POWER_JACK_W / 2 + POWER_FROM_LEFT
 
 power_jack_cutout = (cq.Workplane("YZ")
                      .workplane(offset=-OUTER_LENGTH/2)
                      .center(power_center_z, power_center_y)
-                     .circle(power_jack_dia/2)
+                     .rect(POWER_JACK_W, POWER_JACK_H)
                      .extrude(WALL_THICKNESS))
 base = base.cut(power_jack_cutout)
 
@@ -156,7 +180,7 @@ base = base.cut(usb_cutout)
 
 # RJ45 cutout: right above USB cutout (on left wall)
 rj45_cut = (RJ45_CUT_W, RJ45_CUT_H)  # width and height of cutout on wall
-rj45_gap = 10  # mm gap between USB and RJ45
+rj45_gap = RJ45_GAP  # vertical gap between USB and RJ45 cutouts
 rj45_center_y = usb_center_y + usb_cut_arduino[1] / 2 + rj45_gap + rj45_cut[1]/2
 rj45_cutout = (cq.Workplane("YZ")
                .workplane(offset=-OUTER_LENGTH/2)
@@ -171,7 +195,7 @@ jack_positions = [
     (
         -OUTER_WIDTH / 2
         + FIRST_AUDIO_JACK_CENTER_FROM_LEFT
-        + i * AUDIO_JACK_SPACING_CENTER_TO_CENTER,
+        + JACKS_DISTANCES_FROM_WALL[i-1],
         jack_center_z,
     )
     for i in range(4)
@@ -214,34 +238,6 @@ ledge_inner = (cq.Workplane("XY")
     .extrude(LEDGE_HEIGHT))
 base = base.union(ledge_outer.cut(ledge_inner))
 
-
-# Clip grooves in base inner X-walls (4 rectangular pockets for snap-fit bumps)
-groove_w = CLIP_BUMP_WIDTH + CLIP_GROOVE_EXTRA
-groove_h = CLIP_BUMP_HEIGHT + CLIP_GROOVE_EXTRA
-lid_seated_origin_z = base_top_z - LID_HEIGHT / 2
-groove_center_z = lid_seated_origin_z + (-LID_HEIGHT/2 + 1.0 + CLIP_BUMP_HEIGHT/2)
-
-for x_sign in [-1, 1]:
-    wall_inner_x = x_sign * BOX_LENGTH / 2
-    for y_pos in CLIP_Y_POSITIONS:
-        groove = (cq.Workplane("YZ")
-            .workplane(offset=wall_inner_x)
-            .center(y_pos, groove_center_z)
-            .rect(groove_w, groove_h)
-            .extrude(x_sign * CLIP_GROOVE_DEPTH))
-        base = base.cut(groove)
-
-# Clip grooves in base inner Y-walls (4 rectangular pockets for snap-fit bumps)
-for y_sign in [-1, 1]:
-    wall_inner_y = y_sign * BOX_WIDTH / 2
-    for x_pos in CLIP_X_POSITIONS:
-        groove = (cq.Workplane("XZ")
-            .workplane(offset=wall_inner_y)
-            .center(x_pos, groove_center_z)
-            .rect(groove_w, groove_h)
-            .extrude(y_sign * CLIP_GROOVE_DEPTH))
-        base = base.cut(groove)
-
 # Pry slots on all 4 walls for screwdriver lid removal (cut from outer face inward)
 # Y walls (front -Y and back +Y)
 for x_pos in PRY_SLOT_X_POSITIONS:
@@ -273,7 +269,7 @@ skirt_height = LID_HEIGHT - LID_THICKNESS  # skirt below the top plate
 # Top plate covers the base opening
 top_plate = (cq.Workplane("XY")
     .workplane(offset=LID_HEIGHT / 2 - LID_THICKNESS)
-    .rect(BOX_LENGTH, BOX_WIDTH)
+    .rect(OUTER_LENGTH, OUTER_WIDTH)
     .extrude(LID_THICKNESS))
 
 # Hollow skirt drops inside the base cavity
@@ -333,6 +329,72 @@ box_lid = (box_lid.faces(">Z")
        .center(push_btn_x, push_btn_y)
        .circle(PUSH_BUTTON_DIA/2)
        .cutThruAll())
+
+# Inner LCD holder clips (4 sides) to retain an 80.0 x 35.7 x 8.5 mm module.
+# Keep these after top cutouts so button/LCD openings do not remove retention clips.
+inner_face_z = LID_HEIGHT / 2 - LID_THICKNESS
+x_clip_center = LCD_MODULE_OUTER_W / 2 - LCD_CLIP_EDGE_INSET
+y_clip_center = LCD_MODULE_OUTER_H / 2 - LCD_CLIP_EDGE_INSET
+
+for x_sign in [-1, 1]:
+    clip = (cq.Workplane("XY")
+        .workplane(offset=inner_face_z)
+        .center(x_sign * x_clip_center, 0)
+        .rect(LCD_CLIP_THICKNESS, LCD_CLIP_SPAN)
+        .extrude(-LCD_CLIP_DEPTH))
+    box_lid = box_lid.union(clip)
+
+for y_sign in [-1, 1]:
+    clip = (cq.Workplane("XY")
+        .workplane(offset=inner_face_z)
+        .center(0, y_sign * y_clip_center)
+        .rect(LCD_CLIP_SPAN, LCD_CLIP_THICKNESS)
+        .extrude(-LCD_CLIP_DEPTH))
+    box_lid = box_lid.union(clip)
+
+# Add shallow grooves on the inner faces of the clips to seat LCD PCB edges.
+groove_span = LCD_CLIP_SPAN - 2 * LCD_CLIP_GROOVE_MARGIN
+groove_center_z = inner_face_z - LCD_CLIP_GROOVE_TOP_OFFSET - LCD_PCB_THICKNESS / 2
+
+for x_sign in [-1, 1]:
+    inward_face_x = x_sign * (x_clip_center - LCD_CLIP_THICKNESS / 2)
+    groove = (cq.Workplane("YZ")
+        .workplane(offset=inward_face_x)
+        .center(0, groove_center_z)
+        .rect(groove_span, LCD_PCB_THICKNESS)
+        .extrude(x_sign * LCD_CLIP_GROOVE_DEPTH))
+    box_lid = box_lid.cut(groove)
+
+for y_sign in [-1, 1]:
+    inward_face_y = y_sign * (y_clip_center - LCD_CLIP_THICKNESS / 2)
+    groove = (cq.Workplane("XZ")
+        .workplane(offset=inward_face_y)
+        .center(0, groove_center_z)
+        .rect(groove_span, LCD_PCB_THICKNESS)
+        .extrude(y_sign * LCD_CLIP_GROOVE_DEPTH))
+    box_lid = box_lid.cut(groove)
+
+# Add snap-fit retention lips at the free end of clips (away from top wall).
+lip_span = groove_span - 1.0
+lip_center_z = inner_face_z - LCD_CLIP_DEPTH + LCD_CLIP_SNAP_LIP_Z_OFFSET
+
+for x_sign in [-1, 1]:
+    inward_face_x = x_sign * (x_clip_center - LCD_CLIP_THICKNESS / 2)
+    lip = (cq.Workplane("YZ")
+        .workplane(offset=inward_face_x)
+        .center(0, lip_center_z)
+        .rect(lip_span, LCD_CLIP_SNAP_LIP_HEIGHT)
+        .extrude(-x_sign * LCD_CLIP_SNAP_LIP))
+    box_lid = box_lid.union(lip)
+
+for y_sign in [-1, 1]:
+    inward_face_y = y_sign * (y_clip_center - LCD_CLIP_THICKNESS / 2)
+    lip = (cq.Workplane("XZ")
+        .workplane(offset=inward_face_y)
+        .center(0, lip_center_z)
+        .rect(lip_span, LCD_CLIP_SNAP_LIP_HEIGHT)
+        .extrude(-y_sign * LCD_CLIP_SNAP_LIP))
+    box_lid = box_lid.union(lip)
 
 # Fillet lid top edges for comfort when handling
 box_lid = box_lid.edges(">Z").fillet(LID_FILLET_R / 2)
