@@ -61,8 +61,9 @@ JACKS_DISTANCES_FROM_WALL =[
     AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3 + AUDIO_JACK_SPACING_3_TO_4
 ]
 
-# Bottom mounting holes for external DIN rail clamps (2x)
-DIN_CLAMP_HOLE_DIA = 4.2       # mm, M4-style clearance
+# Bottom mounting slots for external DIN rail clamps (2x oval for adjustment)
+DIN_CLAMP_HOLE_DIA = 4.2       # mm, M4-style clearance (slot width)
+DIN_CLAMP_SLOT_ELONGATION = 4.0  # mm extra length along X for wiggle room
 DIN_CLAMP_HOLE_SPACING = 70.0  # mm, center-to-center along enclosure length
 
 
@@ -105,20 +106,13 @@ LCD_CLIP_SNAP_LIP_Z_OFFSET = 1.0
 # Snap-fit clip parameters
 CLIP_BUMP_WIDTH = 5.0          # mm along wall
 CLIP_BUMP_HEIGHT = 2.0         # mm in Z
-CLIP_BUMP_DEPTH = 0.5          # mm protrusion from skirt
-CLIP_Y_POSITIONS = [-12, 12]   # mm from center, on each X-wall
-CLIP_X_POSITIONS = [-20, 20]   # mm from center, on each Y-wall
+CLIP_BUMP_DEPTH = 0.3          # mm protrusion from skirt (gentle engagement)
+CLIP_Y_POSITIONS = [0]         # mm from center, on each X-wall (1 centered clip per wall)
+CLIP_X_POSITIONS = [0]         # mm from center, on each Y-wall (1 centered clip per wall)
 
-# Alignment ledge
-LEDGE_DEPTH = 0.75             # mm step inward from cavity wall at top
-LEDGE_HEIGHT = 2.0             # mm tall
-
-# Pry slot parameters (screwdriver lid removal, all 4 walls, cut from outside)
-PRY_SLOT_WIDTH = 6.0           # mm along wall
-PRY_SLOT_DEPTH = 2.0           # mm inward from outer wall face
-PRY_SLOT_HEIGHT = 2.5          # mm down from base wall top
-PRY_SLOT_X_POSITIONS = [-15, 15]  # mm from center, for Y walls (along length)
-PRY_SLOT_Y_POSITIONS = [-10, 10]  # mm from center, for X walls (along width)
+# Pry chamfer parameters (screwdriver lid removal, 2 opposing Y-walls)
+PRY_CHAMFER_SPAN = 10.0        # mm along wall (width of chamfered section)
+PRY_CHAMFER_DEPTH = 1.5        # mm vertical drop (45° bevel at parting line)
 
 # Create base (box without top wall)
 outer = cq.Workplane("XY").box(OUTER_LENGTH, OUTER_WIDTH, OUTER_HEIGHT)
@@ -216,52 +210,33 @@ extra_jack_hole = (cq.Workplane("XZ")
                    .extrude(OUTER_WIDTH + 2 * WALL_THICKNESS, both=True))
 base = base.cut(extra_jack_hole)
 
-# Two through-holes in the bottom floor for screw-mounting DIN rail clamps
+# Two oval slots in the bottom floor for screw-mounting DIN rail clamps (elongated along X)
 din_hole_x = DIN_CLAMP_HOLE_SPACING / 2
-din_hole_points = [(-din_hole_x, 0), (din_hole_x, 0)]
-din_hole_cuts = (cq.Workplane("XY")
-    .workplane(offset=-OUTER_HEIGHT / 2)
-    .pushPoints(din_hole_points)
-    .circle(DIN_CLAMP_HOLE_DIA / 2)
-    .extrude(WALL_THICKNESS + 1.0))
-base = base.cut(din_hole_cuts)
+for x_sign in [-1, 1]:
+    din_slot = (cq.Workplane("XY")
+        .workplane(offset=-OUTER_HEIGHT / 2)
+        .center(x_sign * din_hole_x, 0)
+        .slot2D(DIN_CLAMP_HOLE_DIA + DIN_CLAMP_SLOT_ELONGATION, DIN_CLAMP_HOLE_DIA, angle=0)
+        .extrude(WALL_THICKNESS + 1.0))
+    base = base.cut(din_slot)
 
-# Alignment ledge: narrows the cavity opening at the top so the skirt registers snugly
 base_top_z = OUTER_HEIGHT/2 - LID_THICKNESS
-ledge_outer = (cq.Workplane("XY")
-    .workplane(offset=base_top_z - LEDGE_HEIGHT)
-    .rect(BOX_LENGTH, BOX_WIDTH)
-    .extrude(LEDGE_HEIGHT))
-ledge_inner = (cq.Workplane("XY")
-    .workplane(offset=base_top_z - LEDGE_HEIGHT)
-    .rect(BOX_LENGTH - 2*LEDGE_DEPTH, BOX_WIDTH - 2*LEDGE_DEPTH)
-    .extrude(LEDGE_HEIGHT))
-base = base.union(ledge_outer.cut(ledge_inner))
 
-# Pry slots on all 4 walls for screwdriver lid removal (cut from outer face inward)
-# Y walls (front -Y and back +Y)
-for x_pos in PRY_SLOT_X_POSITIONS:
-    for y_sign in [-1, 1]:
-        slot = (cq.Workplane("XZ")
-            .workplane(offset=y_sign * OUTER_WIDTH / 2)
-            .center(x_pos, base_top_z - PRY_SLOT_HEIGHT / 2)
-            .rect(PRY_SLOT_WIDTH, PRY_SLOT_HEIGHT)
-            .extrude(-y_sign * PRY_SLOT_DEPTH))
-        base = base.cut(slot)
-
-# X walls (left -X and right +X)
-for y_pos in PRY_SLOT_Y_POSITIONS:
-    for x_sign in [-1, 1]:
-        slot = (cq.Workplane("YZ")
-            .workplane(offset=x_sign * OUTER_LENGTH / 2)
-            .center(y_pos, base_top_z - PRY_SLOT_HEIGHT / 2)
-            .rect(PRY_SLOT_WIDTH, PRY_SLOT_HEIGHT)
-            .extrude(-x_sign * PRY_SLOT_DEPTH))
-        base = base.cut(slot)
+# Pry chamfers on opposing Y-walls (front and back) for screwdriver lid removal.
+# A 45° bevel on the base wall top edge creates a wedge gap for screwdriver entry.
+for y_sign in [-1, 1]:
+    chamfer_cut = (cq.Workplane("XZ")
+        .workplane(offset=y_sign * OUTER_WIDTH / 2)
+        .center(-PRY_CHAMFER_SPAN / 2, base_top_z)
+        .lineTo(PRY_CHAMFER_SPAN, 0)
+        .lineTo(PRY_CHAMFER_SPAN, -PRY_CHAMFER_DEPTH)
+        .close()
+        .extrude(-y_sign * WALL_THICKNESS))
+    base = base.cut(chamfer_cut)
 
 
 # Create lid (inset design: top plate rests on base walls, skirt fits inside)
-lid_clearance = 0.75  # mm per side (room for clip bumps)
+lid_clearance = 1.0  # mm per side (room for clip bumps, easy insertion)
 skirt_outer_l = BOX_LENGTH - 2 * lid_clearance
 skirt_outer_w = BOX_WIDTH - 2 * lid_clearance
 skirt_height = LID_HEIGHT - LID_THICKNESS  # skirt below the top plate
@@ -286,6 +261,8 @@ box_lid = top_plate.union(skirt_solid.cut(skirt_void))
 # Snap-fit clip bumps on skirt outer X-faces
 bump_center_z = -LID_HEIGHT/2 + 1.0 + CLIP_BUMP_HEIGHT/2
 
+CLIP_CHAMFER_HEIGHT = 0.8  # mm, lead-in taper on insertion side of bump
+
 for x_sign in [-1, 1]:
     skirt_face_x = x_sign * skirt_outer_l / 2
     for y_pos in CLIP_Y_POSITIONS:
@@ -294,7 +271,15 @@ for x_sign in [-1, 1]:
             .center(y_pos, bump_center_z)
             .rect(CLIP_BUMP_WIDTH, CLIP_BUMP_HEIGHT)
             .extrude(x_sign * CLIP_BUMP_DEPTH))
-        box_lid = box_lid.union(bump)
+        # Lead-in chamfer: triangular cut on top of bump for smooth insertion
+        chamfer_cut = (cq.Workplane("YZ")
+            .workplane(offset=skirt_face_x)
+            .center(y_pos - CLIP_BUMP_WIDTH/2, bump_center_z + CLIP_BUMP_HEIGHT/2 - CLIP_CHAMFER_HEIGHT)
+            .lineTo(CLIP_BUMP_WIDTH, 0)
+            .lineTo(CLIP_BUMP_WIDTH, CLIP_CHAMFER_HEIGHT)
+            .close()
+            .extrude(x_sign * CLIP_BUMP_DEPTH))
+        box_lid = box_lid.union(bump).cut(chamfer_cut)
 
 # Snap-fit clip bumps on skirt outer Y-faces
 for y_sign in [-1, 1]:
@@ -305,7 +290,15 @@ for y_sign in [-1, 1]:
             .center(x_pos, bump_center_z)
             .rect(CLIP_BUMP_WIDTH, CLIP_BUMP_HEIGHT)
             .extrude(y_sign * CLIP_BUMP_DEPTH))
-        box_lid = box_lid.union(bump)
+        # Lead-in chamfer: triangular cut on top of bump for smooth insertion
+        chamfer_cut = (cq.Workplane("XZ")
+            .workplane(offset=skirt_face_y)
+            .center(x_pos - CLIP_BUMP_WIDTH/2, bump_center_z + CLIP_BUMP_HEIGHT/2 - CLIP_CHAMFER_HEIGHT)
+            .lineTo(CLIP_BUMP_WIDTH, 0)
+            .lineTo(CLIP_BUMP_WIDTH, CLIP_CHAMFER_HEIGHT)
+            .close()
+            .extrude(y_sign * CLIP_BUMP_DEPTH))
+        box_lid = box_lid.union(bump).cut(chamfer_cut)
 
 # Add LCD cutout to lid
 lcd_cutout = (66, 16)
