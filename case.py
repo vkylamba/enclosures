@@ -225,18 +225,16 @@ base_top_z = OUTER_HEIGHT/2 - LID_THICKNESS
 # Pry chamfers on opposing Y-walls (front and back) for screwdriver lid removal.
 # A 45° bevel on the base wall top edge creates a wedge gap for screwdriver entry.
 for y_sign in [-1, 1]:
-    chamfer_cut = (cq.Workplane("XZ")
+    pry_slot = (cq.Workplane("XZ")
         .workplane(offset=y_sign * OUTER_WIDTH / 2)
-        .center(-PRY_CHAMFER_SPAN / 2, base_top_z)
-        .lineTo(PRY_CHAMFER_SPAN, 0)
-        .lineTo(PRY_CHAMFER_SPAN, -PRY_CHAMFER_DEPTH)
-        .close()
+        .center(0, base_top_z - PRY_CHAMFER_DEPTH / 2)
+        .rect(PRY_CHAMFER_SPAN, PRY_CHAMFER_DEPTH)
         .extrude(-y_sign * WALL_THICKNESS))
-    base = base.cut(chamfer_cut)
+    base = base.cut(pry_slot)
 
 
 # Create lid (inset design: top plate rests on base walls, skirt fits inside)
-lid_clearance = 1.0  # mm per side (room for clip bumps, easy insertion)
+lid_clearance = 0.2  # mm per side (0.1mm interference with 0.3mm clip bumps for snap engagement)
 skirt_outer_l = BOX_LENGTH - 2 * lid_clearance
 skirt_outer_w = BOX_WIDTH - 2 * lid_clearance
 skirt_height = LID_HEIGHT - LID_THICKNESS  # skirt below the top plate
@@ -246,6 +244,7 @@ top_plate = (cq.Workplane("XY")
     .workplane(offset=LID_HEIGHT / 2 - LID_THICKNESS)
     .rect(OUTER_LENGTH, OUTER_WIDTH)
     .extrude(LID_THICKNESS))
+top_plate = top_plate.edges("|Z").fillet(EXT_FILLET_R)  # match base outer corner radii
 
 # Hollow skirt drops inside the base cavity
 skirt_solid = (cq.Workplane("XY")
@@ -390,7 +389,7 @@ for y_sign in [-1, 1]:
     box_lid = box_lid.union(lip)
 
 # Fillet lid top edges for comfort when handling
-box_lid = box_lid.edges(">Z").fillet(LID_FILLET_R / 2)
+box_lid = box_lid.edges(">Z").fillet(LID_FILLET_R * 0.6)  # ~0.9mm; larger fails on complex geometry
 
 def create_visualization_notebook(model, output_dir="wall_views"):
     """
@@ -490,6 +489,14 @@ def preview_enclosure(base, lid, show_preview=False, export_file=False, create_n
         cq.exporters.export(lid, 'output/lcd_arduino_enclosure_lid.stl', 'STL')
         cq.exporters.export(lid, 'output/lcd_arduino_enclosure_lid.svg', 'SVG')
         print("Exported 'lcd_arduino_enclosure_base.step' and 'lcd_arduino_enclosure_lid.step'")
+
+        # Assembled view: lid positioned on base for fit check
+        lid_z_offset = (OUTER_HEIGHT / 2 - LID_THICKNESS) - (LID_HEIGHT / 2 - LID_THICKNESS)
+        assembly = cq.Assembly()
+        assembly.add(base, name="base", color=cq.Color("gray"))
+        assembly.add(lid, name="lid", loc=cq.Location((0, 0, lid_z_offset)), color=cq.Color("steelblue"))
+        assembly.toCompound().exportStep('output/lcd_arduino_enclosure_assembled.step')
+        print("Exported 'lcd_arduino_enclosure_assembled.step' (lid on base for fit check)")
     
     if create_notebook:
         create_visualization_notebook(base)
