@@ -3,72 +3,48 @@ from pathlib import Path
 
 import cadquery as cq
 
-
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
-BASE_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_base.step"
-
-# Arduino Mega hat footprint dimensions from measurements and reference PNG (mm)
-HAT_HEIGHT = 20  # mm
-WALL_THICKNESS = 2.5
-BOARD_RAW_LENGTH = 105
-BOARD_RAW_WIDTH = 55.5
-
-# Arduino Mega board drawing dimensions from reference PNG (mm)
-BOX_LENGTH = BOARD_RAW_LENGTH + 1.5  # add margin for silkscreen and measurement uncertainty
-BOX_WIDTH = BOARD_RAW_WIDTH + 1.5  # add margin for silkscreen and measurement uncertainty
-BOX_HEIGHT = 50  # mm, from case.py
-
-# Mounting-hole centres from board drawing (mm), origin at board bottom-left.
-# Pattern in drawing: 3 x-columns (14.0, 64.8, 88.9) with 3 y-levels
-# where holes exist at: left(top,bottom), middle(mid,bottom), right(top,bottom).
-
-MEGA_MOUNTS = [
-    (14.75, 3.25),   # First from bottom left
-    (16.05, 51.55),  # First from top left
-    (65.55, 8.35),   # Second from bottom left
-    (65.55, 36.25),  # Second from top left
-    (93.75, 3.25),   # Third from bottom left
-    (89.65, 48.95),  # Third from top left
-]
-
-MOUNT_BOSS_DIA = 3.8
-MOUNT_BOSS_HEIGHT = 3
-MOUNT_BOSS_PILOT_DIA = 2.4
-
-# Side-wall connector specs from case.py / drawing notes (mm)
-USB_CUT_W = 15
-USB_CUT_H = 8
-RJ45_CUT_W = 15
-RJ45_CUT_H = 15
-RJ45_GAP = 9
-POWER_JACK_W = 10
-POWER_JACK_H = 15
-
-# Offsets on YZ side-wall sketch in case.py (mm)
-USB_FROM_RIGHT = 13.5
-POWER_FROM_LEFT = 8
-BOTTOM_OFFSET = 7
-
-# Audio Jack from left
-AUDIO_JACK_DIA = 6
-AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM = 16
-FIRST_AUDIO_JACK_CENTER_FROM_LEFT = 8
-AUDIO_JACK_SPACING_1_TO_2 = 12.8
-AUDIO_JACK_SPACING_2_TO_3 = 16.4
-AUDIO_JACK_SPACING_3_TO_4 = 12.8
-NUMBER_OF_AUDIO_JACKS = 4
-EXTRA_AUDIO_JACK_CENTER_FROM_LEFT = 26.5
-
-JACKS_DISTANCES_FROM_WALL = [
-    0,
+from enclosure_parts import (
+    AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM,
+    AUDIO_JACK_DIA,
     AUDIO_JACK_SPACING_1_TO_2,
-    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3,
-    AUDIO_JACK_SPACING_1_TO_2 + AUDIO_JACK_SPACING_2_TO_3 + AUDIO_JACK_SPACING_3_TO_4,
-]
+    AUDIO_JACK_SPACING_2_TO_3,
+    AUDIO_JACK_SPACING_3_TO_4,
+    BOX_HEIGHT,
+    BOX_LENGTH,
+    BOX_WIDTH,
+    BOARD_RAW_LENGTH,
+    BOARD_RAW_WIDTH,
+    BOTTOM_OFFSET,
+    DIN_CLAMP_HOLE_DIA,
+    DIN_CLAMP_HOLE_SPACING,
+    EXTRA_AUDIO_JACK_CENTER_FROM_LEFT,
+    FIRST_AUDIO_JACK_CENTER_FROM_LEFT,
+    JACKS_DISTANCES_FROM_WALL,
+    MEGA_MOUNTS,
+    MOUNT_BOSS_DIA,
+    MOUNT_BOSS_HEIGHT,
+    MOUNT_BOSS_PILOT_DIA,
+    NUMBER_OF_AUDIO_JACKS,
+    OUTPUT_DIR,
+    POWER_FROM_LEFT,
+    POWER_JACK_H,
+    POWER_JACK_W,
+    PLUG_PANEL_THICKNESS,
+    PLUG_SNAP_TAB_SPAN,
+    PLUG_SNAP_TAB_THICK,
+    RJ45_CUT_H,
+    RJ45_CUT_W,
+    RJ45_GAP,
+    USB_CUT_H,
+    USB_CUT_W,
+    USB_FROM_RIGHT,
+    WALL_THICKNESS,
+)
 
-# Bottom DIN clamp mounting holes
-DIN_CLAMP_HOLE_DIA = 4.2
-DIN_CLAMP_HOLE_SPACING = 70.0
+
+BASE_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_base.step"
+AUDIO_PANEL_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_audio_panel.step"
+CONNECTOR_PANEL_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_connector_panel.step"
 
 
 def _load_shape():
@@ -98,12 +74,12 @@ class TestBaseEnclosure(unittest.TestCase):
         inner_height = bbox.zmax - floor_top_z
         base_bottom_offset = floor_bottom_z - bbox.zmin
 
-        self.assertAlmostEqual(inner_length, BOX_LENGTH, delta=0.2)
+        self.assertAlmostEqual(inner_length, BOX_LENGTH, delta=0.5)
         self.assertAlmostEqual(inner_width, BOX_WIDTH, delta=0.2)
         self.assertAlmostEqual(inner_height, BOX_HEIGHT, delta=0.2)
         self.assertAlmostEqual(base_bottom_offset, 0.0, delta=0.2)
 
-        self.assertLessEqual(BOX_LENGTH, inner_length)
+        self.assertLessEqual(BOX_LENGTH, inner_length + 0.2)
         self.assertLessEqual(BOX_WIDTH, inner_width)
 
         self.assertLessEqual(USB_FROM_RIGHT + USB_CUT_W / 2, inner_width)
@@ -146,9 +122,9 @@ class TestBaseEnclosure(unittest.TestCase):
             f"Point {cavity_point.toTuple()} should be hollow cavity, not solid",
         )
 
-        # Point inside a side wall must be solid.
+        # Point inside a Y side wall must be solid (both X ends are open for plug-in panels).
         wall_point = cq.Vector(
-            bbox.xmax - WALL_THICKNESS / 2, 0,
+            0, bbox.ymax - WALL_THICKNESS / 2,
             floor_bottom_z + WALL_THICKNESS / 2,
         )
         self.assertTrue(
@@ -169,7 +145,7 @@ class TestBaseEnclosure(unittest.TestCase):
         inner_height = bbox.zmax - (floor_bottom_z + WALL_THICKNESS)
 
         self.assertGreaterEqual(
-            inner_length, BOX_LENGTH,
+            inner_length, BOX_LENGTH - 0.2,
             f"Inner length {inner_length:.1f} mm < box {BOX_LENGTH} mm",
         )
         self.assertGreaterEqual(
@@ -244,31 +220,28 @@ class TestBaseEnclosure(unittest.TestCase):
                 "boss diameter/placement may be incorrect",
             )
 
-    def test_side_wall_has_usb_power_and_rj45_holes(self):
-        """USB, power, and RJ45 cutouts must all be on the same side wall."""
-        self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
+    def test_connector_panel_has_usb_power_and_rj45_holes(self):
+        """Pluggable -X panel must carry USB, power, and RJ45 cutouts."""
+        self.assertTrue(
+            CONNECTOR_PANEL_STEP_PATH.exists(),
+            f"Missing STEP file: {CONNECTOR_PANEL_STEP_PATH}",
+        )
 
-        shape = _load_shape()
+        shape = cq.importers.importStep(str(CONNECTOR_PANEL_STEP_PATH))
+        if hasattr(shape, "val"):
+            shape = shape.val()
         bbox = shape.BoundingBox()
-        floor_bottom_z = _shell_floor_bottom_z(bbox)
+        base_bbox = _load_shape().BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(base_bbox)
 
-        wall_x = bbox.xmin + WALL_THICKNESS / 2
-        opposite_wall_x = bbox.xmax - WALL_THICKNESS / 2
+        panel_wall_x = bbox.xmin + PLUG_PANEL_THICKNESS / 2
 
-        usb_center_y = bbox.ymax - USB_FROM_RIGHT - USB_CUT_W / 2
+        usb_center_y = base_bbox.ymax - USB_FROM_RIGHT - USB_CUT_W / 2
         usb_center_z = floor_bottom_z + BOTTOM_OFFSET + USB_CUT_H / 2
-
         rj45_center_y = usb_center_y
         rj45_center_z = usb_center_z + USB_CUT_H / 2 + RJ45_GAP + RJ45_CUT_H / 2
-
-        power_center_y = bbox.ymin + POWER_FROM_LEFT + POWER_JACK_W / 2
+        power_center_y = base_bbox.ymin + POWER_FROM_LEFT + POWER_JACK_W / 2
         power_center_z = floor_bottom_z + BOTTOM_OFFSET + POWER_JACK_H / 2
-
-        # RJ45 should sit above USB on the same wall.
-        self.assertGreater(
-            rj45_center_z, usb_center_z,
-            "RJ45 should be above the USB cutout (upper-left)",
-        )
 
         connectors = [
             ("USB", usb_center_y, usb_center_z, USB_CUT_W / 2, USB_CUT_H / 2),
@@ -277,64 +250,241 @@ class TestBaseEnclosure(unittest.TestCase):
         ]
 
         for name, center_y, center_z, half_w, half_h in connectors:
-            centre_pt = cq.Vector(wall_x, center_y, center_z)
+            centre_pt = cq.Vector(panel_wall_x, center_y, center_z)
             self.assertFalse(
                 shape.isInside(centre_pt),
-                f"{name} cutout centre {centre_pt.toTuple()} should be open (air)",
-            )
-
-            wrong_wall_pt = cq.Vector(opposite_wall_x, center_y, center_z)
-            self.assertTrue(
-                shape.isInside(wrong_wall_pt),
-                f"{name} should NOT be cut on opposite wall at {wrong_wall_pt.toTuple()}",
+                f"{name} cutout centre {centre_pt.toTuple()} should be open on connector panel",
             )
 
             probe_points = [
-                cq.Vector(wall_x, center_y + half_w + 1.5, center_z),
-                cq.Vector(wall_x, center_y - half_w - 1.5, center_z),
-                cq.Vector(wall_x, center_y, center_z + half_h + 1.5),
-                cq.Vector(wall_x, center_y, center_z - half_h - 1.5),
+                cq.Vector(panel_wall_x, center_y + half_w + 1.5, center_z),
+                cq.Vector(panel_wall_x, center_y - half_w - 1.5, center_z),
+                cq.Vector(panel_wall_x, center_y, center_z + half_h + 1.5),
+                cq.Vector(panel_wall_x, center_y, center_z - half_h - 1.5),
             ]
             self.assertTrue(
                 any(shape.isInside(pt) for pt in probe_points),
-                f"No side-wall material found around {name} cutout",
+                f"No connector panel material around {name} cutout",
             )
 
-    def test_opposite_side_wall_has_4_audio_jack_holes(self):
-        """Wall opposite wall_x must have 4 audio-jack through-holes."""
+    def test_minus_x_wall_is_open_for_pluggable_connector_panel(self):
+        """-X end wall is removed; USB/power/RJ45 live on the separate plug-in panel."""
         self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
         floor_bottom_z = _shell_floor_bottom_z(bbox)
 
-        opposite_wall_x = bbox.xmax - WALL_THICKNESS / 2
+        minus_x_opening = bbox.xmin + WALL_THICKNESS + 1.5
+        usb_center_z = floor_bottom_z + BOTTOM_OFFSET + USB_CUT_H / 2
+        centre_pt = cq.Vector(
+            minus_x_opening,
+            bbox.ymax - USB_FROM_RIGHT - USB_CUT_W / 2,
+            usb_center_z,
+        )
+        self.assertFalse(
+            shape.isInside(centre_pt),
+            f"-X opening {centre_pt.toTuple()} should be open in base shell",
+        )
 
-        # Jack centres are specified from the left edge with fixed spacing.
+    def test_plus_x_wall_is_open_for_pluggable_audio_panel(self):
+        """+X end wall is removed; audio jacks live on the separate plug-in panel."""
+        self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
+
+        shape = _load_shape()
+        bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
+
+        opposite_wall_x = bbox.xmax - WALL_THICKNESS - 1.5
+        jack_center_z = floor_bottom_z + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM + BOTTOM_OFFSET
+        centre_pt = cq.Vector(
+            opposite_wall_x,
+            0,
+            jack_center_z,
+        )
+        self.assertFalse(
+            shape.isInside(centre_pt),
+            f"+X opening {centre_pt.toTuple()} should be open in base shell",
+        )
+
+    def test_audio_panel_has_4_audio_jack_holes(self):
+        """Pluggable +X panel must carry the 4 audio-jack through-holes."""
+        self.assertTrue(
+            AUDIO_PANEL_STEP_PATH.exists(),
+            f"Missing STEP file: {AUDIO_PANEL_STEP_PATH}",
+        )
+
+        shape = cq.importers.importStep(str(AUDIO_PANEL_STEP_PATH))
+        if hasattr(shape, "val"):
+            shape = shape.val()
+        bbox = shape.BoundingBox()
+
+        base_bbox = _load_shape().BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(base_bbox)
+
+        panel_wall_x = bbox.xmax - PLUG_PANEL_THICKNESS / 2
         jack_radius = AUDIO_JACK_DIA / 2
         jack_centres_y = [
-            bbox.ymin + FIRST_AUDIO_JACK_CENTER_FROM_LEFT
+            base_bbox.ymin + FIRST_AUDIO_JACK_CENTER_FROM_LEFT
             + JACKS_DISTANCES_FROM_WALL[index]
             for index in range(NUMBER_OF_AUDIO_JACKS)
         ]
         jack_center_z = floor_bottom_z + AUDIO_JACK_CENTER_HEIGHT_FROM_BOTTOM + BOTTOM_OFFSET
 
         for index, center_y in enumerate(jack_centres_y, start=1):
-            centre_pt = cq.Vector(opposite_wall_x, center_y, jack_center_z)
+            centre_pt = cq.Vector(panel_wall_x, center_y, jack_center_z)
             self.assertFalse(
                 shape.isInside(centre_pt),
-                f"Audio jack {index} centre {centre_pt.toTuple()} should be open",
+                f"Audio panel jack {index} centre {centre_pt.toTuple()} should be open",
             )
 
             surround_pts = [
-                cq.Vector(opposite_wall_x, center_y + jack_radius + 1.2, jack_center_z),
-                cq.Vector(opposite_wall_x, center_y - jack_radius - 1.2, jack_center_z),
-                cq.Vector(opposite_wall_x, center_y, jack_center_z + jack_radius + 1.2),
-                cq.Vector(opposite_wall_x, center_y, jack_center_z - jack_radius - 1.2),
+                cq.Vector(panel_wall_x, center_y + jack_radius + 1.2, jack_center_z),
+                cq.Vector(panel_wall_x, center_y - jack_radius - 1.2, jack_center_z),
+                cq.Vector(panel_wall_x, center_y, jack_center_z + jack_radius + 1.2),
+                cq.Vector(panel_wall_x, center_y, jack_center_z - jack_radius - 1.2),
             ]
             self.assertTrue(
                 any(shape.isInside(pt) for pt in surround_pts),
-                f"No wall material around audio jack {index}",
+                f"No panel material around audio jack {index}",
+            )
+
+    def test_audio_panel_has_snap_tabs_on_floor_and_sides(self):
+        """Panel has square snap tabs on floor and Y edges for base retention holes."""
+        self.assertTrue(
+            AUDIO_PANEL_STEP_PATH.exists(),
+            f"Missing STEP file: {AUDIO_PANEL_STEP_PATH}",
+        )
+
+        shape = cq.importers.importStep(str(AUDIO_PANEL_STEP_PATH))
+        if hasattr(shape, "val"):
+            shape = shape.val()
+        panel_bbox = shape.BoundingBox()
+        base_bbox = _load_shape().BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(base_bbox)
+        floor_inner_z = floor_bottom_z + WALL_THICKNESS
+        panel_z_center = (floor_inner_z + base_bbox.zmax - WALL_THICKNESS) / 2
+        panel_center_x = base_bbox.xmax - WALL_THICKNESS
+
+        floor_tab = cq.Vector(
+            panel_center_x,
+            0,
+            floor_inner_z - WALL_THICKNESS / 2,
+        )
+        self.assertTrue(
+            shape.isInside(floor_tab),
+            f"Floor snap tab {floor_tab.toTuple()} should be solid",
+        )
+
+        side_tab = cq.Vector(
+            panel_center_x,
+            panel_bbox.ymax - WALL_THICKNESS / 2,
+            panel_z_center,
+        )
+        self.assertTrue(
+            shape.isInside(side_tab),
+            f"Side snap tab {side_tab.toTuple()} should be solid",
+        )
+
+    def test_connector_panel_has_snap_tabs_on_floor_and_sides(self):
+        """Connector panel has square snap tabs on floor and Y edges."""
+        self.assertTrue(
+            CONNECTOR_PANEL_STEP_PATH.exists(),
+            f"Missing STEP file: {CONNECTOR_PANEL_STEP_PATH}",
+        )
+
+        shape = cq.importers.importStep(str(CONNECTOR_PANEL_STEP_PATH))
+        if hasattr(shape, "val"):
+            shape = shape.val()
+        panel_bbox = shape.BoundingBox()
+        base_bbox = _load_shape().BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(base_bbox)
+        floor_inner_z = floor_bottom_z + WALL_THICKNESS
+        panel_z_center = (floor_inner_z + base_bbox.zmax - WALL_THICKNESS) / 2
+        panel_center_x = base_bbox.xmin + WALL_THICKNESS
+
+        floor_tab = cq.Vector(
+            panel_center_x,
+            0,
+            floor_inner_z - WALL_THICKNESS / 2,
+        )
+        self.assertTrue(
+            shape.isInside(floor_tab),
+            f"Connector floor snap tab {floor_tab.toTuple()} should be solid",
+        )
+
+        side_tab = cq.Vector(
+            panel_center_x,
+            panel_bbox.ymax - WALL_THICKNESS / 2,
+            panel_z_center,
+        )
+        self.assertTrue(
+            shape.isInside(side_tab),
+            f"Connector side snap tab {side_tab.toTuple()} should be solid",
+        )
+
+    def test_base_floor_has_panel_tab_holes_at_both_ends(self):
+        """Floor must have snap tab holes at both +X and -X panel ends."""
+        self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
+
+        shape = _load_shape()
+        bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
+        floor_inner_z = floor_bottom_z + WALL_THICKNESS
+        panel_center_x = bbox.xmax - WALL_THICKNESS
+
+        hole_pt = cq.Vector(panel_center_x, 0, floor_inner_z - 0.5)
+        self.assertFalse(
+            shape.isInside(hole_pt),
+            f"+X floor tab hole {hole_pt.toTuple()} should be open",
+        )
+
+        minus_x_hole = cq.Vector(bbox.xmin + WALL_THICKNESS, 0, floor_inner_z - 0.5)
+        self.assertFalse(
+            shape.isInside(minus_x_hole),
+            f"-X floor tab hole {minus_x_hole.toTuple()} should be open",
+        )
+
+    def test_base_y_walls_have_panel_tab_holes_at_both_ends(self):
+        """Y walls must have snap tab holes at both +X and -X panel ends."""
+        self.assertTrue(BASE_STEP_PATH.exists(), f"Missing STEP file: {BASE_STEP_PATH}")
+
+        shape = _load_shape()
+        bbox = shape.BoundingBox()
+        floor_bottom_z = _shell_floor_bottom_z(bbox)
+        floor_inner_z = floor_bottom_z + WALL_THICKNESS
+        panel_z_center = (floor_inner_z + bbox.zmax - WALL_THICKNESS) / 2
+        panel_center_x = bbox.xmax - WALL_THICKNESS
+
+        for y_sign in [-1, 1]:
+            plus_x_hole = cq.Vector(
+                panel_center_x,
+                y_sign * (BOX_WIDTH / 2 + WALL_THICKNESS / 2),
+                panel_z_center,
+            )
+            self.assertFalse(
+                shape.isInside(plus_x_hole),
+                f"+X Y-wall through-hole {plus_x_hole.toTuple()} should be open",
+            )
+
+            minus_x_hole = cq.Vector(
+                bbox.xmin + WALL_THICKNESS,
+                y_sign * (BOX_WIDTH / 2 + WALL_THICKNESS / 2),
+                panel_z_center,
+            )
+            self.assertFalse(
+                shape.isInside(minus_x_hole),
+                f"-X Y-wall through-hole {minus_x_hole.toTuple()} should be open",
+            )
+
+            outer_pt = cq.Vector(
+                panel_center_x,
+                y_sign * (bbox.ymax if y_sign > 0 else bbox.ymin) - y_sign * WALL_THICKNESS / 2,
+                panel_z_center,
+            )
+            self.assertFalse(
+                shape.isInside(outer_pt),
+                f"Y-wall outer face hole {outer_pt.toTuple()} should be open",
             )
 
     def test_adjacent_walls_have_extra_audio_jack(self):

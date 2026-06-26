@@ -3,33 +3,45 @@ from pathlib import Path
 
 import cadquery as cq
 
+from enclosure_parts import (
+    BOX_LENGTH,
+    BOX_WIDTH,
+    LCD_CUTOUT,
+    LCD_MODULE_HEIGHT,
+    LCD_MODULE_OUTER_H,
+    LCD_MODULE_OUTER_W,
+    LID_HEIGHT,
+    OUTPUT_DIR,
+    SLOT_CLEARANCE,
+    SWITCH_BODY_H,
+    SWITCH_BODY_W,
+    SWITCH_CLEARANCE,
+    SWITCH_HOLDER_LIP_HEIGHT,
+    SWITCH_HOLDER_WALL,
+    SWITCH_PLUNGER_GAP,
+    SWITCH_SUPPORT_FLOOR,
+    TAB_GAP_FROM_LCD,
+    TAB_LENGTH,
+    TAB_WIDTH,
+    LIVING_HINGE_WIDTH,
+    WALL_THICKNESS,
+)
 
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
+
 LID_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_lid.step"
 BASE_STEP_PATH = OUTPUT_DIR / "lcd_arduino_enclosure_base.step"
 
-# Lid dimensions references
-INNER_LENGTH_REF = 106.5
-INNER_WIDTH_REF = 57
-WALL_THICKNESS = 2.5
-LID_HEIGHT = 50 / 5  # box_height / 5
+switch_cavity_size = SWITCH_BODY_W + 2 * SWITCH_CLEARANCE
+switch_holder_outer = switch_cavity_size + 2 * SWITCH_HOLDER_WALL
+cavity_half = switch_cavity_size / 2
+wall_half = cavity_half + SWITCH_HOLDER_WALL / 2
 
-# LCD cutout (from case.py)
-LCD_CUTOUT_W = 66
-LCD_CUTOUT_H = 16
-LCD_CENTER_X = 0.0   # centred on lid
-LCD_CENTER_Y = 0.0   # centred on lid
-
-# LCD module outer size from Issues.md (clip holder target)
-LCD_MODULE_OUTER_W = 80.0
-LCD_MODULE_OUTER_H = 35.7
-LCD_MODULE_HEIGHT = 8.5
-
-# Push button (from case.py)
-PUSH_BUTTON_DIA = 7
-# Button is 3mm gap to the right of LCD right edge, centred vertically with LCD
-PUSH_BTN_X = LCD_CENTER_X + LCD_CUTOUT_W / 2 + PUSH_BUTTON_DIA / 2 + 3
-PUSH_BTN_Y = LCD_CENTER_Y
+lcd_right_x = LCD_CUTOUT[0] / 2
+hinge_left_x = lcd_right_x + TAB_GAP_FROM_LCD
+tab_left_x = hinge_left_x + LIVING_HINGE_WIDTH + SLOT_CLEARANCE
+tab_right_x = tab_left_x + TAB_LENGTH
+TAB_CENTER_X = (tab_left_x + tab_right_x) / 2
+TAB_CENTER_Y = 0.0
 
 
 def _load_shape():
@@ -54,18 +66,8 @@ class TestLidEnclosure(unittest.TestCase):
         base_bbox = base_shape.BoundingBox()
 
         # Cap top should at least span the base outer wall footprint.
-        self.assertGreaterEqual(
-            lid_bbox.xlen,
-            base_bbox.xlen - 0.3,
-            f"Lid X coverage too small: lid={lid_bbox.xlen:.2f} mm, "
-            f"base={base_bbox.xlen:.2f} mm",
-        )
-        self.assertGreaterEqual(
-            lid_bbox.ylen,
-            base_bbox.ylen - 0.3,
-            f"Lid Y coverage too small: lid={lid_bbox.ylen:.2f} mm, "
-            f"base={base_bbox.ylen:.2f} mm",
-        )
+        self.assertGreaterEqual(lid_bbox.xlen, base_bbox.xlen - 0.3)
+        self.assertGreaterEqual(lid_bbox.ylen, base_bbox.ylen - 0.3)
 
     def test_lid_has_lcd_cutout(self):
         """Lid top face must have a rectangular LCD cutout."""
@@ -78,7 +80,7 @@ class TestLidEnclosure(unittest.TestCase):
         plate_z = bbox.zmax - WALL_THICKNESS / 2
 
         # Centre of LCD cutout should be air (cutThruAll)
-        lcd_pt = cq.Vector(LCD_CENTER_X, LCD_CENTER_Y, plate_z)
+        lcd_pt = cq.Vector(0.0, 0.0, plate_z)
         self.assertFalse(
             shape.isInside(lcd_pt),
             f"LCD centre {lcd_pt.toTuple()} should be cut out, not solid",
@@ -86,19 +88,19 @@ class TestLidEnclosure(unittest.TestCase):
 
         # Sample points within the LCD rectangle should also be air
         for dx, dy in [
-            (LCD_CUTOUT_W / 2 - 2, 0),
-            (-LCD_CUTOUT_W / 2 + 2, 0),
-            (0, LCD_CUTOUT_H / 2 - 2),
-            (0, -LCD_CUTOUT_H / 2 + 2),
+            (LCD_CUTOUT[0] / 2 - 2, 0),
+            (-LCD_CUTOUT[0] / 2 + 2, 0),
+            (0, LCD_CUTOUT[1] / 2 - 2),
+            (0, -LCD_CUTOUT[1] / 2 + 2),
         ]:
-            pt = cq.Vector(LCD_CENTER_X + dx, LCD_CENTER_Y + dy, plate_z)
+            pt = cq.Vector(dx, dy, plate_z)
             self.assertFalse(
                 shape.isInside(pt),
                 f"LCD area {pt.toTuple()} should be cut out",
             )
 
         # A point on the top plate outside the LCD cutout should be solid.
-        outside_pt = cq.Vector(0, -(INNER_WIDTH_REF / 2 - WALL_THICKNESS - 3), plate_z)
+        outside_pt = cq.Vector(0, -(BOX_WIDTH / 2 - WALL_THICKNESS - 3), plate_z)
         self.assertTrue(
             shape.isInside(outside_pt),
             f"Lid surface {outside_pt.toTuple()} outside LCD should be solid",
@@ -130,7 +132,7 @@ class TestLidEnclosure(unittest.TestCase):
 
         for probe_z, label in [(near_face_z, "near inner face"), (hold_depth_z, "hold depth")]:
             clip_probe_points = [
-                cq.Vector(LCD_CENTER_X + dx, LCD_CENTER_Y + dy, probe_z)
+                cq.Vector(dx, dy, probe_z)
                 for dx, dy in side_offsets
             ]
             solid_count = sum(1 for pt in clip_probe_points if shape.isInside(pt))
@@ -141,43 +143,82 @@ class TestLidEnclosure(unittest.TestCase):
                 f"80.0 x 35.7 mm module ({label}), found {solid_count}",
             )
 
-    def test_lid_has_push_button_hole(self):
-        """Lid must have a circular push button hole to the right of the LCD."""
+    def test_lid_has_living_hinge_push_tab(self):
+        """Lid must have a living-hinge press tab to the right of the LCD."""
         self.assertTrue(LID_STEP_PATH.exists(), f"Missing STEP file: {LID_STEP_PATH}")
 
         shape = _load_shape()
         bbox = shape.BoundingBox()
 
-        # Sample the top plate mid-thickness
         plate_z = bbox.zmax - WALL_THICKNESS / 2
+        inner_face_z = bbox.zmax - WALL_THICKNESS
 
-        # Centre of push button hole should be air
-        btn_pt = cq.Vector(PUSH_BTN_X, PUSH_BTN_Y, plate_z)
-        self.assertFalse(
-            shape.isInside(btn_pt),
-            f"Push button centre {btn_pt.toTuple()} should be cut out",
+        # Press tab centre should remain solid material
+        tab_pt = cq.Vector(TAB_CENTER_X, TAB_CENTER_Y, plate_z)
+        self.assertTrue(
+            shape.isInside(tab_pt),
+            f"Living hinge tab centre {tab_pt.toTuple()} should be solid",
         )
 
-        # Button centre must be to the right of the LCD right edge
-        lcd_right_edge = LCD_CENTER_X + LCD_CUTOUT_W / 2
+        # Tab must be to the right of the LCD cutout
+        lcd_right_edge = LCD_CUTOUT[0] / 2
         self.assertGreater(
-            PUSH_BTN_X, lcd_right_edge,
-            "Push button must be to the right of the LCD cutout",
+            TAB_CENTER_X, lcd_right_edge,
+            "Living hinge tab must be to the right of the LCD cutout",
         )
 
-        # Material should exist around the button on the top plate
-        surround_offset = PUSH_BUTTON_DIA / 2 + 1.5
-        for dx, dy in [(surround_offset, 0), (0, surround_offset)]:
-            surround_pt = cq.Vector(
-                PUSH_BTN_X + dx, PUSH_BTN_Y + dy, plate_z,
+        # U-slot beside the tab should be cut through the top plate
+        slot_pt = cq.Vector(tab_right_x + SLOT_CLEARANCE / 2, TAB_CENTER_Y, plate_z)
+        self.assertFalse(
+            shape.isInside(slot_pt),
+            f"Slot beside tab {slot_pt.toTuple()} should be cut out",
+        )
+
+        # Air gap between flex tab underside and stationary switch plunger
+        gap_pt = cq.Vector(TAB_CENTER_X, TAB_CENTER_Y, inner_face_z - SWITCH_PLUNGER_GAP / 2)
+        self.assertFalse(
+            shape.isInside(gap_pt),
+            f"Plunger gap {gap_pt.toTuple()} should be open air, not solid",
+        )
+
+        # Switch cavity on fixed bridge should be hollow
+        switch_top_z = inner_face_z - SWITCH_PLUNGER_GAP
+        pocket_pt = cq.Vector(TAB_CENTER_X, TAB_CENTER_Y, switch_top_z - SWITCH_BODY_H / 2)
+        self.assertFalse(
+            shape.isInside(pocket_pt),
+            f"Switch cavity {pocket_pt.toTuple()} should be cut out",
+        )
+
+        # Fixed bridge tying into skirt walls should be solid (probe at wall, not cavity)
+        switch_floor_z = switch_top_z - SWITCH_BODY_H - SWITCH_SUPPORT_FLOOR
+        skirt_inner_half_w = (BOX_WIDTH - 2 * 0.2 - 2 * WALL_THICKNESS) / 2  # matches lid skirt inner
+        bridge_pt = cq.Vector(TAB_CENTER_X, skirt_inner_half_w - 1.0, switch_floor_z + SWITCH_SUPPORT_FLOOR / 2)
+        self.assertTrue(
+            shape.isInside(bridge_pt),
+            f"Fixed switch bridge {bridge_pt.toTuple()} should be solid",
+        )
+
+        # Holder walls around the cavity should be solid
+        holder_mid_z = switch_floor_z + SWITCH_SUPPORT_FLOOR + SWITCH_BODY_H / 2
+        for dx, dy in [(wall_half, 0), (0, wall_half)]:
+            wall_pt = cq.Vector(TAB_CENTER_X + dx, TAB_CENTER_Y + dy, holder_mid_z)
+            self.assertTrue(
+                shape.isInside(wall_pt),
+                f"Switch holder wall {wall_pt.toTuple()} should be solid",
             )
-            # Only check if point is within the top plate footprint
-            if (abs(surround_pt.x) < INNER_LENGTH_REF / 2
-                    and abs(surround_pt.y) < INNER_WIDTH_REF / 2):
-                self.assertTrue(
-                    shape.isInside(surround_pt),
-                    f"Lid material around button {surround_pt.toTuple()} should be solid",
-                )
+
+        # Snap lips at cavity floor should be solid on each side
+        lip_z = switch_floor_z + SWITCH_SUPPORT_FLOOR + SWITCH_HOLDER_LIP_HEIGHT / 2
+        lip_probe_points = [
+            cq.Vector(TAB_CENTER_X + cavity_half - 0.2, TAB_CENTER_Y, lip_z),
+            cq.Vector(TAB_CENTER_X, TAB_CENTER_Y + cavity_half - 0.2, lip_z),
+        ]
+        lip_solid_count = sum(1 for pt in lip_probe_points if shape.isInside(pt))
+        self.assertGreaterEqual(
+            lip_solid_count,
+            2,
+            f"Expected snap lips at switch cavity floor, found {lip_solid_count}",
+        )
 
 
 if __name__ == "__main__":

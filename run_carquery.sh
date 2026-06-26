@@ -7,7 +7,9 @@ source /opt/anaconda3/etc/profile.d/conda.sh
 # Activate the cadquery environment
 conda activate cadquery-env
 
-# Run the script
-/opt/anaconda3/envs/cadquery-env/bin/python case.py
+# Run the split scripts
+/opt/anaconda3/envs/cadquery-env/bin/python base.py
+/opt/anaconda3/envs/cadquery-env/bin/python lid.py
+/opt/anaconda3/envs/cadquery-env/bin/python side_walls.py
 
 echo "CadQuery script completed!"
